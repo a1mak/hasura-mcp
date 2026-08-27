@@ -63,8 +63,8 @@ Roughly nine tools, one per action (the surface is small enough that search+exec
 
 Tables, columns and relationships come from Hasura metadata. Two inferences are forbidden because both fail silently:
 
-- **No shape heuristics.** "An object type with an `id` field is a table" drops enum tables keyed on `value`, which Hasura codebases use routinely. An existing Hasura MCP server ships exactly this bug.
-- **No assumed naming convention.** Whether columns surface as `snake_case` or `camelCase` in GraphQL is per-instance configuration. One project's docs claimed camelCase while its live instance returned snake_case. Both are valid.
+- **No shape heuristics.** "An object type with an `id` field is a table" drops enum tables keyed on `value`, which Hasura codebases use routinely.
+- **No assumed naming convention.** Whether columns surface as `snake_case` or `camelCase` in GraphQL is per-instance configuration. Both are valid; neither can be assumed.
 
 A wrong-but-confident schema answer is the failure mode this package exists to prevent.
 
