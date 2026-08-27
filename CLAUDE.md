@@ -6,7 +6,7 @@ When reporting information to me, be extremely concise and sacrifice grammar for
 
 ## Do this first, every session
 
-1. **Read this file to the end.** The trap section below has cost more time than anything else in the project.
+1. **Read this file to the end.** Design decisions and anti-features are settled; re-deriving them wastes a turn.
 2. **Check the shipped SDK typings before writing protocol code** — `node_modules/@modelcontextprotocol/server/dist/*.d.mts`. Docs and skills have already been wrong about this package twice (see Conventions).
 3. **This package owns no database.** Anything needing a live Hasura runs against a disposable container spun up as a fixture — never a stack you don't own.
 4. **Run `npm run typecheck`** after edits, and exercise any changed tool in the MCP Inspector before claiming it works.
@@ -57,6 +57,8 @@ Roughly nine tools, one per action (the surface is small enough that search+exec
 8. `migration_status` / `diff_metadata` — local project vs. what the engine has loaded.
 9. Mutations — see Protocol notes.
 
+**Keep the count near this.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
+
 ### Discovery must read metadata, never infer
 
 Tables, columns and relationships come from Hasura metadata. Two inferences are forbidden because both fail silently:
@@ -66,7 +68,6 @@ Tables, columns and relationships come from Hasura metadata. Two inferences are 
 
 A wrong-but-confident schema answer is the failure mode this package exists to prevent.
 
-**Keep the count near this.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
 
 ### Anti-features
 
@@ -96,7 +97,7 @@ Three obligations that follow:
 
 - **Never** send an elicitation request to a client that hasn't declared elicitation support (capabilities are per-request in `_meta`). Have a documented fallback.
 - **Never** assume the client retries. A dropped confirmation must leave nothing behind.
-- Read/write tools must be **separate**. A single tool taking both safe and unsafe operations is a known rejection reason, and annotations (`readOnlyHint` / `destructiveHint`) drive whether a host auto-runs a tool or prompts. Every tool gets a `title` and the applicable hint.
+- Read/write tools must be **separate**. A single tool taking both safe and unsafe operations is rejected by Anthropic's directory review — not a gate we're currently subject to, but the right shape regardless — and annotations (`readOnlyHint` / `destructiveHint`) drive whether a host auto-runs a tool or prompts. Every tool gets a `title` and the applicable hint.
 
 ## Conventions
 
@@ -118,7 +119,6 @@ Never claim a tool works, a bug is fixed, or a build passes without having run t
 - **Functional over OOP** — pure functions, immutability, composition.
 - **Strict TypeScript** with proper type annotations. No `any` escapes without a comment justifying it.
 - **Pattern matching (`ts-pattern`)**: use `match(...)` when branching on a discriminated union, a `status`/enum, or multi-case domain logic — MCP result types, elicitation outcomes and Hasura error shapes all qualify. Prefer `.exhaustive()` for closed unions so a new case is a compile error, `.otherwise()` for open sets. Don't force it on a simple boolean — a guard or early return is fine there.
-- **Never read known-huge generated artifacts** — introspection dumps, `export_metadata` output, generated type files. They blow the context window. Query them with `jq` or a narrow accessor instead.
 
 ### Tooling and quality
 
