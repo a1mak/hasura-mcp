@@ -1,0 +1,33 @@
+{
+  "name": "@a1mak/hasura-mcp",
+  "version": "0.0.0",
+  "description": "MCP server for Hasura GraphQL Engine v2 — schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
+  "keywords": ["mcp", "model-context-protocol", "hasura", "graphql", "postgres", "claude"],
+  "license": "MIT",
+  "author": "a1mak",
+  "repository": { "type": "git", "url": "git+https://github.com/a1mak/hasura-mcp.git" },
+  "homepage": "https://github.com/a1mak/hasura-mcp#readme",
+  "bugs": { "url": "https://github.com/a1mak/hasura-mcp/issues" },
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "hasura-mcp": "dist/index.js" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.0"
+  }
+}
