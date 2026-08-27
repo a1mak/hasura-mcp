@@ -8,7 +8,7 @@ When reporting information to me, be extremely concise and sacrifice grammar for
 
 1. **Read this file to the end.** The trap section below has cost more time than anything else in the project.
 2. **Check the shipped SDK typings before writing protocol code** — `node_modules/@modelcontextprotocol/server/dist/*.d.mts`. Docs and skills have already been wrong about this package twice (see Conventions).
-3. **Confirm the target Hasura is reachable** before starting anything that queries one: `curl -s $ENDPOINT/v1/version`. A disposable container is the right fixture — never a stack you don't own.
+3. **This package owns no database.** Anything needing a live Hasura runs against a disposable container spun up as a fixture — never a stack you don't own.
 4. **Run `npm run typecheck`** after edits, and exercise any changed tool in the MCP Inspector before claiming it works.
 
 ## What this is
@@ -35,16 +35,6 @@ An agent can never read these. So the design rule is absolute:
 
 There is deliberately **no `introspect_schema` tool that returns the full schema** — shipping that footgun guarantees someone burns their context on it.
 
-## The one trap that has cost the most time
-
-**Never identify tables by shape heuristics.**
-
-The most common implementation shortcut — "a table is an introspected object type that has an `id` field" — silently omits real tables. Hasura codebases routinely use **enum tables keyed on `value`** with no `id` column at all. On the instance this package was designed against, that heuristic would have dropped a large fraction of the schema *without any error*, and an existing Hasura MCP server ships exactly this bug.
-
-Related: **never assume a naming convention.** A project's own documentation claimed Hasura maps `snake_case` columns to `camelCase` GraphQL fields; the live instance returned `snake_case` root fields. Both are valid configurations.
-
-**Read metadata. Do not infer from shape or naming.** Silent omission is worse than no answer — a wrong-but-confident schema answer is the failure mode this package exists to prevent.
-
 ## Design decisions (settled — do not relitigate without asking)
 
 - **Hasura v2 only.** v3/DDN has a different metadata model and would double the surface; it goes behind an adapter later, not in v1.
@@ -66,6 +56,15 @@ Roughly nine tools, one per action (the surface is small enough that search+exec
 7. `validate_query` — dry-run against the schema, errors only.
 8. `migration_status` / `diff_metadata` — local project vs. what the engine has loaded.
 9. Mutations — see Protocol notes.
+
+### Discovery must read metadata, never infer
+
+Tables, columns and relationships come from Hasura metadata. Two inferences are forbidden because both fail silently:
+
+- **No shape heuristics.** "An object type with an `id` field is a table" drops enum tables keyed on `value`, which Hasura codebases use routinely. An existing Hasura MCP server ships exactly this bug.
+- **No assumed naming convention.** Whether columns surface as `snake_case` or `camelCase` in GraphQL is per-instance configuration. One project's docs claimed camelCase while its live instance returned snake_case. Both are valid.
+
+A wrong-but-confident schema answer is the failure mode this package exists to prevent.
 
 **Keep the count near this.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
 
