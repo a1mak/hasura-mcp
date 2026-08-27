@@ -7,3 +7,6 @@ dist/
 !.env.example
 coverage/
 *.log
+
+# Local working memory — specs, plans, research. Not shipped.
+docs/superpowers/

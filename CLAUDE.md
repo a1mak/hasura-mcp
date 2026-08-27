@@ -17,7 +17,9 @@ An MCP server for **Hasura GraphQL Engine v2** (self-hosted, open-source). Gener
 
 Published as `@a1mak/hasura-mcp` on npm, run via `npx -y @a1mak/hasura-mcp`.
 
-> **The tool surface, and the research and measurements behind the constraints below, belong in the spec — not here.** This file holds only what constrains how you work. The spec is not written yet; when it exists, link it here.
+> **The tool surface, and the research and measurements behind the constraints below, belong in the spec — not here.** This file holds only what constrains how you work.
+>
+> Specs, plans and research live in `docs/superpowers/` (specs in `specs/`, plans in `plans/`). That tree is **gitignored** — local working memory, not shipped. Current research: `docs/superpowers/specs/2026-08-27-hasura-mcp-research.md`.
 
 ## Non-negotiable constraints
 
