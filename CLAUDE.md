@@ -6,7 +6,7 @@ When reporting information to me, be extremely concise and sacrifice grammar for
 
 ## Do this first, every session
 
-1. **Read this file to the end.** Design decisions and anti-features are settled; re-deriving them wastes a turn.
+1. **Read this file to the end.** Constraints and design decisions are settled; re-deriving them wastes a turn.
 2. **Check the shipped SDK typings before writing protocol code** — `node_modules/@modelcontextprotocol/server/dist/*.d.mts`. Docs and skills have already been wrong about this package twice (see Conventions).
 3. **This package owns no database.** Anything needing a live Hasura runs against a disposable container spun up as a fixture — never a stack you don't own.
 4. **Run `npm run typecheck`** after edits, and exercise any changed tool in the MCP Inspector before claiming it works.
@@ -17,23 +17,20 @@ An MCP server for **Hasura GraphQL Engine v2** (self-hosted, open-source). Gener
 
 Published as `@a1mak/hasura-mcp` on npm, run via `npx -y @a1mak/hasura-mcp`.
 
-## Why it exists
+> **The tool surface, and the research and measurements behind the constraints below, belong in the spec — not here.** This file holds only what constrains how you work. The spec is not written yet; when it exists, link it here.
 
-Existing Hasura MCP servers were surveyed before starting. None cover the cases below, and Hasura's own MCP effort targets DDN/PromptQL (cloud v3), leaving the large self-hosted v2 install base unserved.
+## Non-negotiable constraints
 
-The core problem is **context cost**. Measured against a real v2.48.5 instance:
+- **The server never dumps.** It holds metadata internally and answers narrow questions. Full introspection is ~1 MB and `export_metadata` ~136 KB on a mid-size instance — no agent can read either. Every tool returns the narrowest useful answer.
+- **No full-introspection tool.** Not as an escape hatch, not behind a flag. Shipping the footgun guarantees someone fires it.
+- **Discovery reads metadata, never infers.** Two inferences are forbidden because both fail silently:
+  - *No shape heuristics.* "An object type with an `id` field is a table" drops enum tables keyed on `value`, which Hasura codebases use routinely.
+  - *No assumed naming convention.* Whether columns surface as `snake_case` or `camelCase` in GraphQL is per-instance configuration. Both are valid; neither can be assumed.
 
-| Artifact | Size |
-|---|---|
-| Full GraphQL introspection | ~1.09 MB |
-| `export_metadata` | ~136 KB |
-| Generated TS types for one instance | 1.4–2.2 MB |
-
-An agent can never read these. So the design rule is absolute:
-
-> **The server holds metadata internally and answers narrow questions. It never dumps.**
-
-There is deliberately **no `introspect_schema` tool that returns the full schema** — shipping that footgun guarantees someone burns their context on it.
+  A wrong-but-confident schema answer is the failure mode this package exists to prevent.
+- **No unguarded `run_sql`.** If raw SQL is ever exposed it must be read-only-enforced and separate from any write path.
+- **No `apply_migration` / `metadata apply` wrappers.** The `hasura` CLI already does this and is what users' CI runs. A second path invites drift.
+- **Keep the tool count near nine, one tool per action.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
 
 ## Design decisions (settled — do not relitigate without asking)
 
@@ -43,45 +40,13 @@ There is deliberately **no `introspect_schema` tool that returns the full schema
 - **TypeScript**, `@modelcontextprotocol/server` **v2** (the 2026-07-28 spec line). Not `@modelcontextprotocol/sdk` v1 — that is the previous generation.
 - TypeScript pinned to **5.9**, not 7.x, deliberately: this ships `.d.ts` and the native compiler is too new to bet a library on. Revisit later.
 
-## Target tool surface
-
-Roughly nine tools, one per action (the surface is small enough that search+execute would be the wrong pattern). Ranked by value:
-
-1. `describe_table` — one table: columns with both Postgres and GraphQL names, PK, FKs, relationships, **and per-role permissions**. Must resolve names fuzzily and suggest alternatives on a miss.
-2. `search_schema` — ranked table/column hits for a term.
-3. `run_query` — GraphQL as a plain string; parsed result; **row cap with an explicit `truncated: true` marker**.
-4. `list_instances` — configured instances with health and (when a project dir is set) migration state.
-5. `list_operations` — actions, event triggers, remote schemas, computed fields.
-6. `explain_query` — wraps `/v1/graphql/explain`, which returns both the plan and the generated SQL.
-7. `validate_query` — dry-run against the schema, errors only.
-8. `migration_status` / `diff_metadata` — local project vs. what the engine has loaded.
-9. Mutations — see Protocol notes.
-
-**Keep the count near this.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
-
-### Discovery must read metadata, never infer
-
-Tables, columns and relationships come from Hasura metadata. Two inferences are forbidden because both fail silently:
-
-- **No shape heuristics.** "An object type with an `id` field is a table" drops enum tables keyed on `value`, which Hasura codebases use routinely.
-- **No assumed naming convention.** Whether columns surface as `snake_case` or `camelCase` in GraphQL is per-instance configuration. Both are valid; neither can be assumed.
-
-A wrong-but-confident schema answer is the failure mode this package exists to prevent.
-
-
-### Anti-features
-
-- No full-introspection dump tool.
-- No unguarded `run_sql`. If raw SQL is ever exposed it must be read-only-enforced and separate from any write path.
-- No `apply_migration` / `metadata apply` wrappers — the `hasura` CLI already does this and is what users' CI runs. A second path invites drift.
-
 ## Protocol notes (2026-07-28 spec)
 
 The protocol is **stateless**. There is no session and no `initialize` handshake; every request carries its own protocol version, client info, and capabilities in `_meta.io.modelcontextprotocol/*`.
 
 **Servers MUST NOT initiate JSON-RPC requests.** When the server needs user input it *answers* with an `InputRequiredResult` and the client retries the whole call — the Multi Round-Trip Request (MRTR) pattern.
 
-This is how mutation confirmation works here:
+Mutation confirmation is built on it:
 
 1. Run the mutation as a dry-run, get an affected-row count.
 2. Return `inputRequired({ inputRequests: { confirm: inputRequired.elicit({...}) } })` with the count in the message.
@@ -97,7 +62,7 @@ Three obligations that follow:
 
 - **Never** send an elicitation request to a client that hasn't declared elicitation support (capabilities are per-request in `_meta`). Have a documented fallback.
 - **Never** assume the client retries. A dropped confirmation must leave nothing behind.
-- Read/write tools must be **separate**. A single tool taking both safe and unsafe operations is rejected by Anthropic's directory review — not a gate we're currently subject to, but the right shape regardless — and annotations (`readOnlyHint` / `destructiveHint`) drive whether a host auto-runs a tool or prompts. Every tool gets a `title` and the applicable hint.
+- Read and write tools must be **separate**. A single tool taking both safe and unsafe operations is rejected by Anthropic's directory review — not a gate we're currently subject to, but the right shape regardless. Every tool gets a `title` and the applicable annotation (`readOnlyHint` / `destructiveHint`); those drive whether a host auto-runs it or prompts.
 
 ## Conventions
 
@@ -110,7 +75,7 @@ Three obligations that follow:
 
 ### Verify before asserting
 
-Never claim a tool works, a bug is fixed, or a build passes without having run the command and read the output. `npm run typecheck` for types; the MCP Inspector for tool behaviour; a live Hasura instance for anything touching the wire. Evidence before assertions, always.
+Never claim a tool works, a bug is fixed, or a build passes without having run the command and read the output. `npm run typecheck` for types; the MCP Inspector for tool behaviour; a disposable Hasura fixture for anything touching the wire. Evidence before assertions, always.
 
 ### Code style
 
@@ -125,7 +90,7 @@ Never claim a tool works, a bug is fixed, or a build passes without having run t
 - ESLint, Prettier, TypeScript strict mode.
 - Husky git hooks with **conventional commits** (also the basis for automated changelogs on npm release).
 
-> **Not yet installed.** The repo currently has strict TypeScript only. Setting up ESLint/Prettier/Husky is an open task.
+> **Not yet installed.** The repo currently has strict TypeScript only. Setting up ESLint/Prettier/Husky is an open task, as is adding `ts-pattern` as a dependency.
 
 ## Commands
 
