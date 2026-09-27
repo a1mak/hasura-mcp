@@ -1,33 +1,81 @@
 {
   "name": "@a1mak/hasura-mcp",
   "version": "0.0.0",
-  "description": "MCP server for Hasura GraphQL Engine v2 — schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
-  "keywords": ["mcp", "model-context-protocol", "hasura", "graphql", "postgres", "claude"],
+  "description": "MCP server for Hasura GraphQL Engine v2 \u2014 schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hasura",
+    "graphql",
+    "postgres",
+    "claude"
+  ],
   "license": "MIT",
   "author": "a1mak",
-  "repository": { "type": "git", "url": "git+https://github.com/a1mak/hasura-mcp.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a1mak/hasura-mcp.git"
+  },
   "homepage": "https://github.com/a1mak/hasura-mcp#readme",
-  "bugs": { "url": "https://github.com/a1mak/hasura-mcp/issues" },
+  "bugs": {
+    "url": "https://github.com/a1mak/hasura-mcp/issues"
+  },
   "type": "module",
-  "engines": { "node": ">=20" },
-  "bin": { "hasura-mcp": "dist/index.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "hasura-mcp": "dist/index.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
+    "ts-pattern": "^5.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.4.0",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
     "tsx": "^4.23.12",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.2"
+  },
+  "lint-staged": {
+    "*.{ts,js,json}": [
+      "prettier --write"
+    ],
+    "*.ts": [
+      "eslint --fix"
+    ]
   }
 }

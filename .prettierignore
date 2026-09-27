@@ -1,0 +1,10 @@
+dist
+coverage
+node_modules
+package-lock.json
+docs/superpowers
+
+# Markdown is hand-written prose. Prettier rewrites *emphasis* to _emphasis_ and
+# reflows lists, which is diff noise with no readability gain — and it fights
+# hand-curated files like CLAUDE.md.
+*.md
