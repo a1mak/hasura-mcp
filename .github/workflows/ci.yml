@@ -73,6 +73,9 @@ jobs:
           curl -sf http://localhost:8299/v1/version
 
       - name: Populate the fixture
+        # Host networking, so the engine reaches itself on the published port.
+        env:
+          HASURA_FIXTURE_SELF_URL: http://localhost:8299/v1/graphql
         run: bash scripts/fixture/setup.sh --objects-only
 
       - run: npm run test:integration

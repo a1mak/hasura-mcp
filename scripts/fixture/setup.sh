@@ -7,11 +7,31 @@
 #   bash setup.sh --objects-only   # skip docker, just re-add the metadata objects
 set -euo pipefail
 
-E=http://localhost:8299
-SECRET=fixture
+E=${HASURA_FIXTURE_ENDPOINT:-http://localhost:8299}
+SECRET=${HASURA_FIXTURE_SECRET:-fixture}
+# Where the engine reaches ITSELF, for the self-referential remote schema. With a
+# port mapping that is the in-container port; under host networking it is the
+# published one. Getting this wrong leaves remote_schemas silently empty.
+SELF=${HASURA_FIXTURE_SELF_URL:-http://localhost:8080/v1/graphql}
 
-md() { curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" -d "$1" $E/v1/metadata; echo; }
-q2() { curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" -d "$1" $E/v2/query; echo; }
+# curl exits 0 on an API error, so without this check a failed metadata call
+# leaves a half-built fixture and the script still reports success.
+api() {
+  local path=$1 payload=$2 out
+  out=$(curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" -d "$payload" "$E$path")
+  echo "$out"
+  case "$out" in
+    *'"error"'*)
+      case "$out" in
+        *'already exists'*|*'already-exists'*|*'already tracked'*|*'already-tracked'*) ;;
+        *) echo "FIXTURE SETUP FAILED on $path" >&2; exit 1 ;;
+      esac
+      ;;
+  esac
+}
+
+md() { api /v1/metadata "$1"; }
+q2() { api /v2/query "$1"; }
 
 if [ "${1:-}" != "--objects-only" ]; then
   echo "== stack =="
@@ -65,7 +85,7 @@ echo "== remote schema, pointed at this instance =="
 # Needs BOTH a root-field namespace AND a type-name prefix. With only the namespace,
 # type names still collide: "conflicting definitions for GraphQL type
 # 'patient_consent_select_column'".
-md '{"type":"add_remote_schema","args":{"name":"self_remote","definition":{"url":"http://localhost:8080/v1/graphql","headers":[{"name":"x-hasura-admin-secret","value":"fixture"}],"forward_client_headers":false,"timeout_seconds":30,"customization":{"root_fields_namespace":"remote","type_names":{"prefix":"rmt_"}}}}}'
+md '{"type":"add_remote_schema","args":{"name":"self_remote","definition":{"url":"'"$SELF"'","headers":[{"name":"x-hasura-admin-secret","value":"fixture"}],"forward_client_headers":false,"timeout_seconds":30,"customization":{"root_fields_namespace":"remote","type_names":{"prefix":"rmt_"}}}}}'
 
 echo "== consistency =="
 md '{"type":"get_inconsistent_metadata","args":{}}'
