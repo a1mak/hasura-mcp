@@ -1,9 +1,9 @@
 #!/bin/bash
 # Disposable Hasura v2 fixture for @a1mak/hasura-mcp.
 #
-# The Postgres side lives in schema.sql and the Hasura side in metadata.json, so
-# both are readable and editable as themselves rather than as JSON wedged into
-# shell quoting.
+# The Postgres side lives in schema.sql and the Hasura side in metadata.yaml, so
+# both are readable and editable as themselves — and the metadata can explain, in
+# comments, which behaviour each object exists to pin.
 #
 #   bash setup.sh                  build containers, then apply
 #   bash setup.sh --objects-only   apply to an engine that is already running
@@ -59,18 +59,18 @@ fi
 curl -s "$E/v1/version"; echo
 
 echo "== schema.sql =="
-api /v2/query "$(python3 -c '
-import json, sys
-sql = open("schema.sql").read()
-print(json.dumps({"type": "run_sql", "args": {"source": "default", "sql": sql}}))
+api /v2/query "$(node -e '
+const fs = require("fs");
+const sql = fs.readFileSync("schema.sql", "utf8");
+console.log(JSON.stringify({ type: "run_sql", args: { source: "default", sql } }));
 ')" >/dev/null && echo "applied"
 
-echo "== metadata.json =="
-api /v1/metadata "$(python3 -c '
-import json, sys
-meta = json.load(open("metadata.json"))
-meta["remote_schemas"][0]["definition"]["url"] = sys.argv[1]
-print(json.dumps({"type": "replace_metadata", "args": meta}))
+echo "== metadata.yaml =="
+api /v1/metadata "$(node -e '
+const yaml = require("yaml"), fs = require("fs");
+const meta = yaml.parse(fs.readFileSync("metadata.yaml", "utf8"));
+meta.remote_schemas[0].definition.url = process.argv[1];
+console.log(JSON.stringify({ type: "replace_metadata", args: meta }));
 ' "$SELF")" >/dev/null && echo "applied"
 
 echo "== consistency =="

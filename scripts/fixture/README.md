@@ -6,7 +6,7 @@ The integration suite runs against this, in CI and locally. Every claim in the
 | file | what it holds |
 |---|---|
 | `schema.sql` | the Postgres side — table, the computed-field function, seed rows |
-| `metadata.json` | the Hasura side — one of every metadata object type, applied with `replace_metadata` |
+| `metadata.yaml` | the Hasura side — one of every metadata object type, applied with `replace_metadata` |
 | `setup.sh` | orchestration only: containers, then the two files above |
 | `probe_logs.py` | fires the event trigger against an unreachable webhook and dumps the delivery-log columns |
 
