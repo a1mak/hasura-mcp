@@ -1,16 +1,7 @@
-/**
- * Server configuration, read from the environment.
- *
- * One Hasura instance per server process: two environments means two entries in
- * the client's MCP config, each with its own admin secret. There is deliberately
- * no `instance` parameter anywhere in the tool surface.
- */
-
 export type ServerConfig = {
-  /** Base URL of the Hasura instance — NOT the `/v1/graphql` path. */
+  /** Base URL — NOT the `/v1/graphql` path; each path is appended by the caller. */
   readonly endpoint: string;
   readonly adminSecret: string;
-  /** Hasura CLI project directory, when one is configured. Enables drift tools. */
   readonly projectDir: string | null;
 };
 
@@ -18,11 +9,7 @@ export type ConfigResult =
   | { readonly ok: true; readonly config: ServerConfig }
   | { readonly ok: false; readonly missing: readonly string[] };
 
-/**
- * The server needs `/v1/graphql`, `/v1/metadata`, `/v2/query`,
- * `/v1/graphql/explain` and `/v1/version`, so it holds the base URL and appends
- * each path itself. A trailing slash would produce `//v1/graphql`.
- */
+// A trailing slash would make every appended path `//v1/graphql`.
 const stripTrailingSlash = (url: string): string => url.replace(/\/+$/, '');
 
 const orEmpty = (value: string | undefined): string => value?.trim() ?? '';
@@ -32,8 +19,6 @@ export const readConfig = (env: NodeJS.ProcessEnv): ConfigResult => {
   const adminSecret = orEmpty(env.HASURA_ADMIN_SECRET);
   const projectDir = orEmpty(env.HASURA_PROJECT_DIR);
 
-  // Report every missing variable at once — one round of "and now this one too"
-  // per restart is a miserable way to configure a server.
   const missing = [
     ...(endpoint === '' ? ['HASURA_ENDPOINT'] : []),
     ...(adminSecret === '' ? ['HASURA_ADMIN_SECRET'] : []),
