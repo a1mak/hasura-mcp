@@ -110,6 +110,7 @@ the tool count, the Hasura version, the date. An undated number is a future lie.
 
 ### Code style
 
+- **Comments earn their place.** Write one only where the code genuinely cannot speak for itself: a protocol constraint, an external behaviour that contradicts expectation, or a deliberate choice whose obvious alternative is wrong. Never restate what the code already says, never narrate the task, and never cite an issue or PR number — that belongs in the tracker, and in source it goes stale and misleads. If a comment would vanish without loss once the reader has read the line below it, delete it.
 - **Early returns** to reduce nesting and improve readability.
 - **Generics** for type safety and reusability.
 - **Functional over OOP** — pure functions, immutability, composition.
@@ -121,8 +122,11 @@ the tool count, the Hasura version, the date. An undated number is a future lie.
 - ESLint, Prettier, TypeScript strict mode.
 - Husky git hooks with **conventional commits** (also the basis for automated changelogs on npm release).
 
-> **Not yet installed.** The repo currently has strict TypeScript only. Tracked as issue
-> [#1](https://github.com/a1mak/hasura-mcp/issues/1), which also covers adding `ts-pattern`.
+`npm run lint` · `npm run format` · `npm run typecheck` · `npm test` · `npm run build`.
+
+Type-aware linting needs the tsconfig split: `tsconfig.json` checks `src`, `tests` and config
+files with `noEmit`; `tsconfig.build.json` emits `src` alone to `dist`. Prettier deliberately
+skips markdown — it rewrites emphasis markers and reflows lists.
 
 ## Development cycle
 
