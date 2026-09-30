@@ -1,0 +1,9 @@
+dist
+coverage
+node_modules
+package-lock.json
+docs/superpowers
+
+# Prettier rewrites *emphasis* to _emphasis_ and reflows lists — diff noise on
+# hand-written prose.
+*.md
