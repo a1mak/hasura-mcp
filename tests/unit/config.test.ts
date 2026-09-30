@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeMissing, readConfig } from '../src/config.js';
+import { describeMissing, readConfig } from '../../src/config.js';
 
 describe('readConfig', () => {
   it('reads a minimal endpoint-only configuration', () => {

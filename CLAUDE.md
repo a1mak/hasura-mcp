@@ -89,7 +89,7 @@ Four layers, all gated in CI on every PR (issue
    real server without a subprocess. Requires `@modelcontextprotocol/client` as a devDependency;
    there is no `Client` class in `core` or `server`. Snapshot `tools/list` — the surface is the
    public API.
-3. **Integration, against the fixture** — `docs/superpowers/fixture/setup.sh`. **The spec's
+3. **Integration, against the fixture** — `scripts/fixture/setup.sh`. **The spec's
    "Verified against the fixture" table is a test file, one test per row.** Those facts are
    exactly what rots silently; as prose they decay, as tests they fail loudly.
    Pinned to **`hasura/graphql-engine:v2.48.5`** — one version, so the support claim equals what

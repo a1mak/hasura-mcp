@@ -22,7 +22,12 @@ export default tseslint.config(
   },
   {
     files: ['tests/**/*.ts'],
-    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      // Vitest's asymmetric matchers (expect.any, expect.stringContaining) are
+      // typed as `any`, so every assertion using one trips this.
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+    },
   },
   {
     // Not covered by tsconfig's `include`, so type-aware rules cannot run.

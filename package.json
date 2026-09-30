@@ -45,10 +45,12 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run tests/unit",
+    "test:watch": "vitest tests/unit",
     "prepare": "husky",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:integration": "vitest run tests/integration",
+    "test:smoke": "npm run build && vitest run tests/smoke"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
