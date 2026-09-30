@@ -1,40 +1,42 @@
 #!/bin/bash
 # Disposable Hasura v2 fixture for @a1mak/hasura-mcp.
-# Brings up the stack and adds one of every metadata object type, so the
-# "verified" claims in ../specs/2026-09-01-hasura-mcp-tool-spec.md can be re-checked.
 #
-#   bash setup.sh          # full build from nothing
-#   bash setup.sh --objects-only   # skip docker, just re-add the metadata objects
+# The Postgres side lives in schema.sql and the Hasura side in metadata.json, so
+# both are readable and editable as themselves rather than as JSON wedged into
+# shell quoting.
+#
+#   bash setup.sh                  build containers, then apply
+#   bash setup.sh --objects-only   apply to an engine that is already running
 set -euo pipefail
+
+cd "$(dirname "$0")"
 
 E=${HASURA_FIXTURE_ENDPOINT:-http://localhost:8299}
 SECRET=${HASURA_FIXTURE_SECRET:-fixture}
+ENGINE_VERSION=${HASURA_FIXTURE_VERSION:-v2.48.5}
 # Where the engine reaches ITSELF, for the self-referential remote schema. With a
 # port mapping that is the in-container port; under host networking it is the
 # published one. Getting this wrong leaves remote_schemas silently empty.
 SELF=${HASURA_FIXTURE_SELF_URL:-http://localhost:8080/v1/graphql}
 
-# curl exits 0 on an API error, so without this check a failed metadata call
-# leaves a half-built fixture and the script still reports success.
+# curl exits 0 on an API error, so without this a failed call leaves a half-built
+# fixture while the script still reports success.
 api() {
   local path=$1 payload=$2 out
-  out=$(curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" -d "$payload" "$E$path")
-  echo "$out"
+  out=$(curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" \
+    --data-binary "$payload" "$E$path")
   case "$out" in
     *'"error"'*)
-      case "$out" in
-        *'already exists'*|*'already-exists'*|*'already tracked'*|*'already-tracked'*) ;;
-        *) echo "FIXTURE SETUP FAILED on $path" >&2; exit 1 ;;
-      esac
+      echo "$out" >&2
+      echo "FIXTURE SETUP FAILED on $path" >&2
+      exit 1
       ;;
   esac
+  echo "$out"
 }
 
-md() { api /v1/metadata "$1"; }
-q2() { api /v2/query "$1"; }
-
 if [ "${1:-}" != "--objects-only" ]; then
-  echo "== stack =="
+  echo "== containers =="
   docker network create hmcp-fixture-net >/dev/null 2>&1 || true
   docker rm -f hmcp-fixture-db hmcp-fixture-engine >/dev/null 2>&1 || true
 
@@ -47,50 +49,36 @@ if [ "${1:-}" != "--objects-only" ]; then
 
   docker run -d --name hmcp-fixture-engine --network hmcp-fixture-net -p 8299:8080 \
     -e HASURA_GRAPHQL_DATABASE_URL=postgres://fixture:fixture@hmcp-fixture-db:5432/fixture \
-    -e HASURA_GRAPHQL_ADMIN_SECRET=$SECRET \
+    -e HASURA_GRAPHQL_ADMIN_SECRET="$SECRET" \
     -e HASURA_GRAPHQL_DEV_MODE=true \
-    hasura/graphql-engine:v2.48.5 >/dev/null
+    "hasura/graphql-engine:$ENGINE_VERSION" >/dev/null
 
-  until curl -s -m 2 $E/v1/version >/dev/null 2>&1; do sleep 1; done
-  curl -s $E/v1/version; echo
+  until curl -s -m 2 "$E/v1/version" >/dev/null 2>&1; do sleep 1; done
 fi
 
-echo "== table + permission =="
-q2 '{"type":"run_sql","args":{"source":"default","sql":"create table if not exists patient_consent (id uuid primary key default gen_random_uuid(), patient_id uuid not null, granted_at timestamptz);"}}'
-md '{"type":"pg_track_table","args":{"source":"default","table":{"schema":"public","name":"patient_consent"}}}'
-md '{"type":"pg_create_select_permission","args":{"source":"default","table":{"schema":"public","name":"patient_consent"},"role":"patient","permission":{"columns":["id","patient_id","granted_at"],"filter":{"patient_id":{"_eq":"X-Hasura-User-Id"}},"limit":100}}}'
+curl -s "$E/v1/version"; echo
 
-echo "== seed rows the dry-run test counts against =="
-curl -s -H 'content-type: application/json' -H "x-hasura-admin-secret: $SECRET" \
-  -d '{"query":"mutation { insert_patient_consent(objects:[{patient_id:\"11111111-1111-1111-1111-111111111111\"},{patient_id:\"11111111-1111-1111-1111-111111111111\"},{patient_id:\"22222222-2222-2222-2222-222222222222\"}]) { affected_rows } }"}' \
-  $E/v1/graphql; echo
+echo "== schema.sql =="
+api /v2/query "$(python3 -c '
+import json, sys
+sql = open("schema.sql").read()
+print(json.dumps({"type": "run_sql", "args": {"source": "default", "sql": sql}}))
+')" >/dev/null && echo "applied"
 
-echo "== computed field =="
-# NOTE: the parameter cannot be named `row` — reserved, fails with a syntax error.
-q2 '{"type":"run_sql","args":{"source":"default","sql":"create or replace function consent_is_active(pc patient_consent) returns boolean as $$ select pc.granted_at is not null $$ language sql stable;"}}'
-md '{"type":"pg_add_computed_field","args":{"source":"default","table":{"schema":"public","name":"patient_consent"},"name":"is_active","definition":{"function":{"schema":"public","name":"consent_is_active"}}}}'
-
-echo "== event trigger (webhook is unreachable on purpose, to produce failed deliveries) =="
-md '{"type":"pg_create_event_trigger","args":{"source":"default","name":"on_consent_created","table":{"schema":"public","name":"patient_consent"},"webhook":"http://example.invalid/hook","insert":{"columns":"*"},"retry_conf":{"num_retries":1,"interval_sec":5,"timeout_sec":5}}}'
-
-echo "== custom types + action + action permission =="
-md '{"type":"set_custom_types","args":{"input_objects":[{"name":"RevokeConsentInput","fields":[{"name":"consentId","type":"uuid!"},{"name":"reason","type":"String"}]}],"objects":[{"name":"RevokeConsentOutput","fields":[{"name":"ok","type":"Boolean!"},{"name":"revokedAt","type":"timestamptz"}]}]}}'
-md '{"type":"create_action","args":{"name":"revokeConsent","definition":{"kind":"synchronous","type":"mutation","arguments":[{"name":"input","type":"RevokeConsentInput!"}],"output_type":"RevokeConsentOutput!","handler":"http://example.invalid/revoke","forward_client_headers":true},"comment":"Revoke a consent and notify downstream"}}'
-md '{"type":"create_action_permission","args":{"action":"revokeConsent","role":"patient"}}'
-
-echo "== cron trigger =="
-md '{"type":"create_cron_trigger","args":{"name":"nightly_consent_audit","webhook":"http://example.invalid/audit","schedule":"0 2 * * *","include_in_metadata":true,"retry_conf":{"num_retries":0}}}'
-
-echo "== remote schema, pointed at this instance =="
-# Needs BOTH a root-field namespace AND a type-name prefix. With only the namespace,
-# type names still collide: "conflicting definitions for GraphQL type
-# 'patient_consent_select_column'".
-md '{"type":"add_remote_schema","args":{"name":"self_remote","definition":{"url":"'"$SELF"'","headers":[{"name":"x-hasura-admin-secret","value":"fixture"}],"forward_client_headers":false,"timeout_seconds":30,"customization":{"root_fields_namespace":"remote","type_names":{"prefix":"rmt_"}}}}}'
+echo "== metadata.json =="
+api /v1/metadata "$(python3 -c '
+import json, sys
+meta = json.load(open("metadata.json"))
+meta["remote_schemas"][0]["definition"]["url"] = sys.argv[1]
+print(json.dumps({"type": "replace_metadata", "args": meta}))
+' "$SELF")" >/dev/null && echo "applied"
 
 echo "== consistency =="
-md '{"type":"get_inconsistent_metadata","args":{}}'
+api /v1/metadata '{"type":"get_inconsistent_metadata","args":{}}'
 
-echo
-echo "Ready at $E (admin secret: $SECRET)."
-echo "Fire a failing delivery:  python3 probe_logs.py"
-echo "Tear down:                docker rm -f hmcp-fixture-engine hmcp-fixture-db"
+cat <<MSG
+
+Ready at $E (admin secret: $SECRET).
+Fire a failing delivery:  python3 probe_logs.py
+Tear down:                docker rm -f hmcp-fixture-engine hmcp-fixture-db
+MSG
