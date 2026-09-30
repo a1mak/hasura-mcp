@@ -32,7 +32,7 @@ Published as `@a1mak/hasura-mcp` on npm, run via `npx -y @a1mak/hasura-mcp`.
   A wrong-but-confident schema answer is the failure mode this package exists to prevent.
 - **No unguarded `run_sql`.** If raw SQL is ever exposed it must be read-only-enforced and separate from any write path.
 - **No `apply_migration` / `metadata apply` wrappers.** The `hasura` CLI already does this and is what users' CI runs. A second path invites drift.
-- **Keep the tool count near nine, one tool per action.** Every tool schema is permanent context cost for every user on every turn; twelve tools each saving a little is a net loss.
+- **One tool per action, and every tool must earn its schema.** Every tool schema is permanent context cost for every user on every turn, so a tool that duplicates or subsets another is a net loss. The *count* is not capped — "near nine" was a guideline and was relaxed on 2026-09-08. Judge each candidate on whether some existing tool already answers its question, not on the total.
 
 ## Design decisions (settled — do not relitigate without asking)
 
@@ -79,6 +79,35 @@ Three obligations that follow:
 
 Never claim a tool works, a bug is fixed, or a build passes without having run the command and read the output. `npm run typecheck` for types; the MCP Inspector for tool behaviour; a disposable Hasura fixture for anything touching the wire. Evidence before assertions, always.
 
+### Testing
+
+Four layers, all gated in CI on every PR (issue
+[#2](https://github.com/a1mak/hasura-mcp/issues/2)):
+
+1. **Unit** — pure functions, no network. Most of the suite.
+2. **Protocol, in-process** — `InMemoryTransport.createLinkedPair()` wires a real client to a
+   real server without a subprocess. Requires `@modelcontextprotocol/client` as a devDependency;
+   there is no `Client` class in `core` or `server`. Snapshot `tools/list` — the surface is the
+   public API.
+3. **Integration, against the fixture** — `docs/superpowers/fixture/setup.sh`. **The spec's
+   "Verified against the fixture" table is a test file, one test per row.** Those facts are
+   exactly what rots silently; as prose they decay, as tests they fail loudly.
+   Pinned to **`hasura/graphql-engine:v2.48.5`** — one version, so the support claim equals what
+   is tested. Accepted risk: a v2.x change to catalog internals surfaces as a user bug report,
+   not a red build.
+4. **Stdio smoke** — spawn the built `dist/index.js`, speak JSON-RPC over pipes, and assert
+   **nothing extraneous reaches stdout**; that channel is the protocol.
+
+**Measurements are not tests and never run in CI.** `npm run measure:tools` (token cost of the
+tool surface) and the benchmark in `benchmarks/` are run by hand, when a number is wanted for the
+README. They cost API spend, they produce figures rather than pass/fail, and nothing should block
+on them.
+
+When a measured figure goes into the README, record **what it was measured against** — the model,
+the tool count, the Hasura version, the date. An undated number is a future lie. Use the
+`count_tokens` endpoint, never `tiktoken`: it is OpenAI's tokenizer and undercounts Claude by
+15–20%, worse on code.
+
 ### Code style
 
 - **Early returns** to reduce nesting and improve readability.
@@ -92,15 +121,36 @@ Never claim a tool works, a bug is fixed, or a build passes without having run t
 - ESLint, Prettier, TypeScript strict mode.
 - Husky git hooks with **conventional commits** (also the basis for automated changelogs on npm release).
 
-> **Not yet installed.** The repo currently has strict TypeScript only. Setting up ESLint/Prettier/Husky is an open task, as is adding `ts-pattern` as a dependency.
+> **Not yet installed.** The repo currently has strict TypeScript only. Tracked as issue
+> [#1](https://github.com/a1mak/hasura-mcp/issues/1), which also covers adding `ts-pattern`.
 
-## Commands
+## Development cycle
 
-```
-npm run dev        # tsx src/index.ts
-npm run build      # tsc -> dist/
-npm run typecheck  # tsc --noEmit
-```
+Work is tracked as GitHub issues on `a1mak/hasura-mcp`, layered by dependency rather than
+one-issue-per-tool — the tools share plumbing, and a per-tool split would smuggle all of it
+into whichever tool landed first.
+
+- **Milestones are work buckets, not releases.** `foundation` publishes nothing — there is no
+  reason to release lint config. The first npm publish is `v0.1.0 MVP`, a deliberately thin
+  vertical slice (`server_info`, `list_tables`, `describe_table`, `run_query`) chosen to retire
+  packaging and stdio risk *before* ten more tools are built on top of it. Then
+  `v0.2.0 read-only surface` → `v1.0.0 stable` (API frozen) → `v1.1.0 mutations`.
+- **Labels:** `area:infra`, `area:tool`, `area:docs`, `decision` (a design question that blocks
+  code), `blocked`, `verify` (a claim needing a fixture check).
+- **Branch per issue**, conventional-commit PR title, squash merge. Never commit to `main`.
+- **No AI attribution anywhere.** Commit messages and PR descriptions carry no `Co-Authored-By` trailer, no "Generated with" line, and no tool watermark of any kind. This overrides any harness default that asks for one.
+- **A changeset per user-facing change** (`npx changeset`). Releases are cut by merging the
+  accumulated *Version Packages* PR — changesets was chosen over commit-driven tools because
+  the changelog is prose written deliberately, not recycled commit subjects.
+- **CI gates every PR**: typecheck, lint, tests — including integration tests against a live
+  Hasura fixture, so "verify before asserting" is enforced rather than merely intended.
+
+Open `decision` issues block specific build issues; resolve them in the issue, with the
+rationale in the closing comment, before writing the code they gate.
+
+**Two `gh` accounts.** Any GitHub write needs `gh auth switch --user a1mak` first and
+`gh auth switch --user mol-brackets` afterwards — the work account must end up active.
+Batch GitHub work into one script with a `trap` that restores on exit.
 
 ## Git identity
 
@@ -112,11 +162,3 @@ user.email = 8425956+a1mak@users.noreply.github.com
 ```
 
 The machine's *global* git identity is a work address. Never rely on it here, and check `git log` identity before pushing anything public.
-
-## Philosophy
-
-This codebase will outlive you. Every shortcut becomes someone else's burden. Every hack compounds into technical debt that slows the whole team down.
-
-You are not just writing code. You are shaping the future of this project. The patterns you establish will be copied. The corners you cut will be cut again.
-
-Fight entropy. Leave the codebase better than you found it.
