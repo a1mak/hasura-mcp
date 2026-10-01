@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  HASURA_VERSION: v2.48.5
+
+jobs:
+  check:
+    name: lint, types, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:smoke
+
+  integration:
+    name: integration against a live Hasura
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: fixture
+        ports: ['5432:5432']
+        # The engine exits outright if Postgres is not accepting connections on
+        # its first boot, so it must not start until this passes.
+        options: >-
+          --health-cmd "pg_isready -U fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Start Hasura
+        run: |
+          docker run -d --name hasura --network host \
+            -e HASURA_GRAPHQL_DATABASE_URL=postgres://fixture:fixture@localhost:5432/fixture \
+            -e HASURA_GRAPHQL_ADMIN_SECRET=fixture \
+            -e HASURA_GRAPHQL_SERVER_PORT=8299 \
+            -e HASURA_GRAPHQL_DEV_MODE=true \
+            hasura/graphql-engine:${{ env.HASURA_VERSION }}
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8299/v1/version && break
+            sleep 2
+          done
+          curl -sf http://localhost:8299/v1/version
+
+      - name: Populate the fixture
+        # Host networking, so the engine reaches itself on the published port.
+        env:
+          HASURA_FIXTURE_SELF_URL: http://localhost:8299/v1/graphql
+        run: bash scripts/fixture/setup.sh --objects-only
+
+      - run: npm run test:integration
+
+      - name: Engine logs
+        if: failure()
+        run: docker logs hasura | tail -100

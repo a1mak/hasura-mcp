@@ -1,0 +1,128 @@
+# Hasura side of the fixture, applied in one `replace_metadata` call.
+#
+# One of every metadata object type, because several of the behaviours the tools
+# depend on are about objects that are NOT tables. Each block below says which
+# behaviour it exists to pin; the assertions live in
+# tests/integration/hasura-behaviour.test.ts.
+#
+# Regenerate from a live engine:
+#   curl -s -H 'x-hasura-admin-secret: fixture' -H 'content-type: application/json' \
+#     -d '{"type":"export_metadata","args":{}}' http://localhost:8299/v1/metadata \
+#     | node -e "const y=require('yaml');let s='';process.stdin.on('data',d=>s+=d)
+#       .on('end',()=>console.log(y.stringify(JSON.parse(s))))"
+
+version: 3
+
+sources:
+  - name: default
+    kind: postgres
+    configuration:
+      connection_info:
+        database_url:
+          from_env: HASURA_GRAPHQL_DATABASE_URL
+
+    tables:
+      - table:
+          name: patient_consent
+          schema: public
+
+        # Queryable in GraphQL, yet absent from information_schema — which is the
+        # only place describe_table reads columns from. It must merge these in or
+        # it reports a field set the agent can demonstrably exceed.
+        computed_fields:
+          - name: is_active
+            definition:
+              function:
+                name: consent_is_active
+                schema: public
+
+        # Gives explain_query a role to simulate. With this role the row filter
+        # and the limit appear in the generated SQL, which is what turns "why does
+        # this role see nothing" into a readable answer.
+        select_permissions:
+          - role: patient
+            permission:
+              columns: [id, patient_id, granted_at]
+              filter:
+                patient_id:
+                  _eq: X-Hasura-User-Id
+              limit: 100
+
+        # The webhook is unreachable on purpose. probe_logs.py fires it so there
+        # are genuinely failed deliveries in hdb_catalog.event_log — including the
+        # null-http-status case, which means "no response at all" rather than an
+        # HTTP error.
+        event_triggers:
+          - name: on_consent_created
+            webhook: http://example.invalid/hook
+            definition:
+              enable_manual: false
+              insert:
+                columns: '*'
+            retry_conf:
+              num_retries: 1
+              interval_sec: 5
+              timeout_sec: 5
+
+# Points the engine at itself. Needs BOTH a root-field namespace and a type-name
+# prefix, or root fields and type names collide with the local schema. The URL is
+# substituted at apply time: a port-mapped container reaches itself on 8080, host
+# networking on 8299.
+remote_schemas:
+  - name: self_remote
+    definition:
+      url: __SELF_URL__
+      timeout_seconds: 30
+      customization:
+        root_fields_namespace: remote
+        type_names:
+          prefix: rmt_
+          mapping: {}
+      # Stored and returned in plaintext by export_metadata, admin secrets and
+      # all — which is why list_operations must never surface header values.
+      headers:
+        - name: x-hasura-admin-secret
+          value: fixture
+
+# Action permissions live here, NOT in the table's *_permissions. A role footprint
+# built only from table permissions silently omits every action the role may call.
+actions:
+  - name: revokeConsent
+    comment: Revoke a consent and notify downstream
+    definition:
+      kind: synchronous
+      type: mutation
+      handler: http://example.invalid/revoke
+      forward_client_headers: true
+      arguments:
+        - name: input
+          type: RevokeConsentInput!
+      output_type: RevokeConsentOutput!
+    permissions:
+      - role: patient
+
+# An action's argument and output shapes sit here rather than on the action, so
+# list_operations has to resolve them or it lists actions nobody can call.
+custom_types:
+  input_objects:
+    - name: RevokeConsentInput
+      fields:
+        - name: consentId
+          type: uuid!
+        - name: reason
+          type: String
+  objects:
+    - name: RevokeConsentOutput
+      fields:
+        - name: ok
+          type: Boolean!
+        - name: revokedAt
+          type: timestamptz
+
+# Logs to hdb_cron_events, whose columns differ from the event-trigger tables —
+# check_event_deliveries normalises four different shapes into one.
+cron_triggers:
+  - name: nightly_consent_audit
+    webhook: http://example.invalid/audit
+    schedule: 0 2 * * *
+    include_in_metadata: true
