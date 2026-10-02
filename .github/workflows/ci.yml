@@ -15,7 +15,7 @@ env:
 
 jobs:
   check:
-    name: lint, types, unit tests, build
+    name: lint, types, unit + protocol tests, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
