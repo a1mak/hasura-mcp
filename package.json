@@ -1,7 +1,7 @@
 {
   "name": "@a1mak/hasura-mcp",
   "version": "0.0.0",
-  "description": "MCP server for Hasura GraphQL Engine v2 — schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
+  "description": "MCP server for Hasura GraphQL Engine v2 \u2014 schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -45,8 +45,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run tests/unit",
-    "test:watch": "vitest tests/unit",
+    "test": "vitest run tests/unit tests/protocol",
+    "test:watch": "vitest tests/unit tests/protocol",
     "prepare": "husky",
     "prepublishOnly": "npm run build",
     "test:integration": "vitest run tests/integration",
@@ -61,6 +61,7 @@
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.3.0",
     "@types/node": "^26.4.0",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
