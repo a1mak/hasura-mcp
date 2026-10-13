@@ -11,11 +11,6 @@ export type GraphqlRequest = {
   readonly sessionVariables?: SessionVariables;
 };
 
-export type ExplainRequest = Omit<GraphqlRequest, 'role' | 'sessionVariables'> & {
-  readonly role?: string;
-  readonly sessionVariables?: SessionVariables;
-};
-
 /** Hasura's run_sql shape: a header row followed by data rows, all stringified. */
 export type SqlResult = { readonly result_type: string; readonly result: string[][] | null };
 
@@ -27,27 +22,18 @@ export type HasuraClient = {
     args?: Readonly<Record<string, unknown>>,
   ) => Promise<HasuraResult<T>>;
   readonly readOnlySql: (sql: string, source?: string) => Promise<HasuraResult<SqlResult>>;
-  readonly explain: <T = unknown>(request: ExplainRequest) => Promise<HasuraResult<T>>;
+  readonly explain: <T = unknown>(request: GraphqlRequest) => Promise<HasuraResult<T>>;
 };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-const roleHeaders = (
+/** A simulated role and its session variables. GraphQL wants them as headers,
+ *  explain wants the same map as its `user` object. */
+const asSession = (
   role?: string,
   sessionVariables?: SessionVariables,
-): Record<string, string> => {
-  if (role === undefined) return {};
-  return { 'x-hasura-role': role, ...(sessionVariables ?? {}) };
-};
-
-/** The `user` object explain takes, which is how a role gets simulated. */
-const explainUser = (
-  role?: string,
-  sessionVariables?: SessionVariables,
-): Record<string, string> | undefined => {
-  if (role === undefined) return undefined;
-  return { 'x-hasura-role': role, ...(sessionVariables ?? {}) };
-};
+): Record<string, string> | undefined =>
+  role === undefined ? undefined : { 'x-hasura-role': role, ...(sessionVariables ?? {}) };
 
 export const createClient = (
   config: ServerConfig,
@@ -109,7 +95,7 @@ export const createClient = (
       const result = await send<T>(
         '/v1/graphql',
         { query: request.query, ...(request.variables ? { variables: request.variables } : {}) },
-        roleHeaders(request.role, request.sessionVariables),
+        asSession(request.role, request.sessionVariables),
       );
       if (!result.ok) return result;
 
@@ -129,16 +115,16 @@ export const createClient = (
         args: { source, sql, read_only: true },
       }),
 
-    explain: (request) =>
-      send('/v1/graphql/explain', {
+    explain: (request) => {
+      const user = asSession(request.role, request.sessionVariables);
+      return send('/v1/graphql/explain', {
         query: {
           query: request.query,
           ...(request.variables ? { variables: request.variables } : {}),
         },
-        ...(explainUser(request.role, request.sessionVariables)
-          ? { user: explainUser(request.role, request.sessionVariables) }
-          : {}),
-      }),
+        ...(user ? { user } : {}),
+      });
+    },
   };
 };
 

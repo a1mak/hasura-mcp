@@ -21,21 +21,5 @@ export const createContext = (config: ServerConfig): ToolContext => {
   return { config, client, metadata: createMetadataReader(client) };
 };
 
-export const createServer = (context: ToolContext): McpServer => {
-  const server = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
-  );
-
-  registerTools(server, context);
-  return server;
-};
-
-/**
- * Every tool registers unconditionally. A tool whose prerequisite is missing
- * answers and says what is missing rather than disappearing — an absent tool
- * leaves the agent no way to learn why.
- */
-const registerTools = (_server: McpServer, _context: ToolContext): void => {
-  // Tools land in #5, #6 and #8.
-};
+export const createServer = (_context: ToolContext): McpServer =>
+  new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });

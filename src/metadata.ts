@@ -55,12 +55,18 @@ export const createMetadataReader = (
     // Concurrent callers share one request rather than stampeding the engine.
     if (inFlight !== null) return inFlight;
 
-    inFlight = client.metadata<Metadata>('export_metadata').then((result) => {
-      // Failures are not cached: the next call should retry, not inherit an outage.
-      if (result.ok) cached = { at: now(), result };
-      inFlight = null;
-      return result;
-    });
+    inFlight = client
+      .metadata<Metadata>('export_metadata')
+      .then((result) => {
+        // Failures are not cached: the next call should retry, not inherit an outage.
+        if (result.ok) cached = { at: now(), result };
+        return result;
+      })
+      // A throw would otherwise leave the rejected promise parked here forever,
+      // and every later read would inherit it.
+      .finally(() => {
+        inFlight = null;
+      });
 
     return inFlight;
   };
