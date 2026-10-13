@@ -141,6 +141,14 @@ into whichever tool landed first.
   `v0.2.0 read-only surface` → `v1.0.0 stable` (API frozen) → `v1.1.0 mutations`.
 - **Labels:** `area:infra`, `area:tool`, `area:docs`, `decision` (a design question that blocks
   code), `blocked`, `verify` (a claim needing a fixture check).
+- **Every feature goes through the superpowers skills.** Anything that adds or changes
+  behaviour — a tool, a shared mechanism, an output shape — runs
+  `superpowers:brainstorming` → `superpowers:writing-plans` → `superpowers:executing-plans`,
+  and finishes on `superpowers:verification-before-completion` before the PR is raised. The
+  plan file lands in `docs/superpowers/plans/`, which is gitignored: it is working memory that
+  outlives a compaction, not a shipped artifact. Where a `decision` issue gates the feature,
+  the brainstorm is where it gets settled and the closing comment carries the rationale.
+  **Small bug fixes and chores are exempt** — fix them directly.
 - **Branch per issue**, conventional-commit PR title, squash merge. Never commit to `main`.
 - **No AI attribution anywhere.** Commit messages and PR descriptions carry no `Co-Authored-By` trailer, no "Generated with" line, and no tool watermark of any kind. This overrides any harness default that asks for one.
 - **A changeset per user-facing change** (`npx changeset`). Releases are cut by merging the
