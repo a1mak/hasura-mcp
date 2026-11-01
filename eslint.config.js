@@ -15,6 +15,7 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       'no-param-reassign': ['error', { props: true }],
       'no-else-return': ['error', { allowElseIf: false }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       // Off because this codebase leans on discriminated unions and readonly
       // object types, which `interface` expresses worse.
       '@typescript-eslint/consistent-type-definitions': 'off',

@@ -20,11 +20,11 @@ const runCli = async (env: Record<string, string>): Promise<Run> => {
 };
 
 /**
- * Runs the built artifact the way a client does. Everything else in the suite
- * tests source; only this catches a package that is broken as shipped.
+ * Only the paths that terminate. A configured server runs until the client
+ * closes the pipe, so its behaviour is asserted in stdio.test.ts instead.
  */
-describe('the built CLI', () => {
-  it('exits non-zero and explains itself on stderr when unconfigured', async () => {
+describe('the built CLI, misconfigured', () => {
+  it('exits non-zero and explains itself on stderr', async () => {
     const { code, stderr } = await runCli({});
 
     expect(code).toBe(1);
@@ -32,30 +32,16 @@ describe('the built CLI', () => {
     expect(stderr).toContain('not the /v1/graphql path');
   });
 
-  it('writes nothing to stdout when unconfigured', async () => {
+  it('writes nothing to stdout, even when failing', async () => {
     const { stdout } = await runCli({});
 
     expect(stdout).toBe('');
   });
 
-  it('writes nothing to stdout when configured', async () => {
-    // stdout carries the protocol. A single stray write corrupts the stream and
-    // the client drops the connection, so this holds on every path.
-    const { code, stdout } = await runCli({
-      HASURA_ENDPOINT: 'http://localhost:8299',
-      HASURA_ADMIN_SECRET: 'fixture',
-    });
+  it('names every missing variable at once', async () => {
+    const { stderr } = await runCli({ HASURA_ENDPOINT: 'http://localhost:8299' });
 
-    expect(code).toBe(0);
-    expect(stdout).toBe('');
-  });
-
-  it('is executable directly, so npx can run it', async () => {
-    const { code } = await runCli({
-      HASURA_ENDPOINT: 'http://localhost:8299',
-      HASURA_ADMIN_SECRET: 'fixture',
-    });
-
-    expect(code).toBe(0);
+    expect(stderr).toContain('HASURA_ADMIN_SECRET');
+    expect(stderr).not.toContain('HASURA_ENDPOINT,');
   });
 });
