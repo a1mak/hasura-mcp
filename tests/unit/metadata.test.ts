@@ -1,17 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import type { HasuraClient } from '../../src/hasura/client.js';
-import { createMetadataReader, permissionMatrix } from '../../src/metadata.js';
+import type { HasuraResult } from '../../src/hasura/errors.js';
+import {
+  createMetadataReader,
+  permissionMatrix,
+  type Metadata,
+  type MetadataFetcher,
+} from '../../src/metadata.js';
 
-const stubClient = (responses: unknown[]): { client: HasuraClient; calls: () => number } => {
+const EXHAUSTED: HasuraResult<Metadata> = {
+  ok: false,
+  failure: { kind: 'api', code: 'stub-exhausted', message: 'no response queued', path: null },
+};
+
+const stubClient = (
+  responses: readonly HasuraResult<Metadata>[],
+): { client: MetadataFetcher; calls: () => number } => {
   let calls = 0;
   const client = {
-    metadata: vi.fn(() => {
-      const response = responses[Math.min(calls, responses.length - 1)];
+    metadata: () => {
+      const response = responses[Math.min(calls, responses.length - 1)] ?? EXHAUSTED;
       calls += 1;
       return Promise.resolve(response);
-    }),
-  } as unknown as HasuraClient;
+    },
+  };
   return { client, calls: () => calls };
 };
 

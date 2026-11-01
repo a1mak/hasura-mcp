@@ -1,4 +1,3 @@
-import type { HasuraClient } from './hasura/client.js';
 import type { HasuraResult } from './hasura/errors.js';
 
 export type TableName = { readonly schema: string; readonly name: string };
@@ -35,13 +34,19 @@ export type Metadata = {
  */
 export const DEFAULT_METADATA_TTL_MS = 2_000;
 
+/** The single call this reader makes. Stated non-generically so the dependency
+ *  is the one method, and a test double is a plain object rather than a cast. */
+export type MetadataFetcher = {
+  readonly metadata: (type: string) => Promise<HasuraResult<Metadata>>;
+};
+
 export type MetadataReader = {
   readonly read: () => Promise<HasuraResult<Metadata>>;
   readonly invalidate: () => void;
 };
 
 export const createMetadataReader = (
-  client: HasuraClient,
+  client: MetadataFetcher,
   options: { readonly ttlMs?: number; readonly now?: () => number } = {},
 ): MetadataReader => {
   const ttlMs = options.ttlMs ?? DEFAULT_METADATA_TTL_MS;
@@ -56,7 +61,7 @@ export const createMetadataReader = (
     if (inFlight !== null) return inFlight;
 
     inFlight = client
-      .metadata<Metadata>('export_metadata')
+      .metadata('export_metadata')
       .then((result) => {
         // Failures are not cached: the next call should retry, not inherit an outage.
         if (result.ok) cached = { at: now(), result };
