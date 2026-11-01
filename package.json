@@ -1,7 +1,7 @@
 {
   "name": "@a1mak/hasura-mcp",
   "version": "0.0.0",
-  "description": "MCP server for Hasura GraphQL Engine v2 \u2014 schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
+  "description": "MCP server for Hasura GraphQL Engine v2 — schema discovery, per-role permission introspection, query explain, and safe mutations across multiple instances.",
   "keywords": [
     "mcp",
     "model-context-protocol",
