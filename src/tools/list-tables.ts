@@ -29,6 +29,12 @@ export type ListTablesArgs = z.infer<typeof listTablesInput>;
 const bySchemaThenName = (a: TableName, b: TableName): number =>
   a.schema === b.schema ? a.name.localeCompare(b.name) : a.schema.localeCompare(b.schema);
 
+const matching =
+  (args: ListTablesArgs) =>
+  (table: TableName): boolean =>
+    (args.schema === undefined || table.schema === args.schema) &&
+    (args.prefix === undefined || table.name.startsWith(args.prefix));
+
 export const runListTables = async (
   context: ToolContext,
   args: ListTablesArgs,
@@ -41,10 +47,7 @@ export const runListTables = async (
   });
   if (!result.ok) return fromFailure(result.failure);
 
-  const matched = result.data
-    .filter((table) => args.schema === undefined || table.schema === args.schema)
-    .filter((table) => args.prefix === undefined || table.name.startsWith(args.prefix))
-    .sort(bySchemaThenName);
+  const matched = result.data.filter(matching(args)).sort(bySchemaThenName);
 
   const { items, truncated, totalMatched } = cap(matched, args.limit);
 
