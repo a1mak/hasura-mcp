@@ -40,7 +40,9 @@ const READ_ONLY = { readOnlyHint: true, idempotentHint: true, openWorldHint: fal
 export const createServer = (context: ToolContext): McpServer => {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } },
+    // The SDK defaults listChanged to true. This list is built once and never
+    // changes, so advertising the notification would promise what never comes.
+    { capabilities: { tools: { listChanged: false } } },
   );
 
   registerTools(server, context);
