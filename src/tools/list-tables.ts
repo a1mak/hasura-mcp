@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 import { cap } from '../budget.js';
 import type { ToolContext } from '../server.js';
-import type { TableName } from '../metadata.js';
-import { fromFailure, toolOk, type ToolResult } from './result.js';
+import { allTables, findSource, type TableName } from '../metadata.js';
+import { fromFailure, toolError, toolOk, type ToolResult } from './result.js';
 
 export const listTablesInput = z.object({
-  schema: z.string().optional().describe('Restrict to one Postgres schema. Omit for all.'),
+  schema: z.string().optional().describe('Restrict to one schema. Omit for all.'),
   prefix: z.string().optional().describe('Only tables whose name starts with this.'),
   source: z.string().default('default').describe('Data source name, from server_info.'),
   limit: z.number().int().min(1).max(500).default(200),
@@ -21,7 +21,7 @@ export const listTablesOutput = z.object({
 export const listTablesDescription =
   'Every table tracked by this Hasura instance, by name. The orientation call for an ' +
   'unfamiliar database, and the way to find the exact name to pass to describe_table. ' +
-  'Returns tracked tables only — a table that exists in Postgres but is untracked is not ' +
+  'Returns tracked tables only — a table that exists in the database but is untracked is not ' +
   'queryable through GraphQL and does not appear here.';
 
 export type ListTablesArgs = z.infer<typeof listTablesInput>;
@@ -39,15 +39,22 @@ export const runListTables = async (
   context: ToolContext,
   args: ListTablesArgs,
 ): Promise<ToolResult> => {
-  // pg_get_source_tables is authoritative. Deriving the list from query_root field
-  // names instead would drop a table named e.g. `payment_stream`, break under
-  // per-table root-field renaming, and hide insert-only tables.
-  const result = await context.client.metadata<TableName[]>('pg_get_source_tables', {
-    source: args.source,
-  });
-  if (!result.ok) return fromFailure(result.failure);
+  const metadata = await context.metadata.read();
+  if (!metadata.ok) return fromFailure(metadata.failure);
 
-  const matched = result.data.filter(matching(args)).sort(bySchemaThenName);
+  const source = findSource(metadata.data, args.source);
+  if (source === undefined) {
+    const names = (metadata.data.sources ?? []).map((s) => s.name).join(', ');
+    return toolError(
+      `No data source named '${args.source}'. This instance has: ${names || 'none'}.`,
+    );
+  }
+
+  // Metadata is the tracked-table list itself, and is not tied to one backend.
+  // Deriving the list from query_root field names instead would drop a table
+  // named e.g. `payment_stream`, break under per-table root-field renaming, and
+  // hide insert-only tables.
+  const matched = allTables(source).filter(matching(args)).sort(bySchemaThenName);
 
   const { items, truncated, totalMatched } = cap(matched, args.limit);
 
