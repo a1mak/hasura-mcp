@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { HasuraResult } from '../../src/hasura/errors.js';
 import {
+  allTables,
   createMetadataReader,
   permissionMatrix,
   type Metadata,
   type MetadataFetcher,
+  type MetadataSource,
 } from '../../src/metadata.js';
 
 const EXHAUSTED: HasuraResult<Metadata> = {
@@ -101,5 +103,31 @@ describe('permissionMatrix', () => {
 
   it('returns an empty matrix for a table nobody can reach', () => {
     expect(permissionMatrix({ table: { schema: 'public', name: 'secret' } })).toEqual({});
+  });
+});
+
+const SOURCE: MetadataSource = {
+  name: 'default',
+  kind: 'postgres',
+  tables: [
+    { table: { schema: 'public', name: 'patient_consent' } },
+    { table: { schema: 'billing', name: 'ledger' } },
+  ],
+};
+
+describe('allTables', () => {
+  it('lists every tracked table across schemas', () => {
+    expect(allTables(SOURCE)).toEqual([
+      { schema: 'public', name: 'patient_consent' },
+      { schema: 'billing', name: 'ledger' },
+    ]);
+  });
+
+  it('returns an empty list for a source with no tracked tables', () => {
+    expect(allTables({ name: 'warehouse', kind: 'postgres' })).toEqual([]);
+  });
+
+  it('returns an empty list for a source that does not exist', () => {
+    expect(allTables(undefined)).toEqual([]);
   });
 });
