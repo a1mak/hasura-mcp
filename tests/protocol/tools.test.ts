@@ -243,6 +243,49 @@ describe('tools/call', () => {
     expect(result.structuredContent).toMatchObject({ tables: [], totalMatched: 0 });
   });
 
+  const withSources = (sources: unknown[]): HasuraClient =>
+    ({
+      ...stubHasura(),
+      metadata: (type: string) =>
+        type === 'export_metadata'
+          ? Promise.resolve({ ok: true, data: { version: 3, sources } })
+          : Promise.resolve({
+              ok: false,
+              failure: { kind: 'api', code: 'not-supported', message: type, path: null },
+            }),
+    }) as unknown as HasuraClient;
+
+  it('answers from the requested source when the instance has several', async () => {
+    const client = withSources([
+      { name: 'first', kind: 'postgres', tables: [{ table: { schema: 'public', name: 'alpha' } }] },
+      { name: 'second', kind: 'postgres', tables: [{ table: { schema: 'public', name: 'beta' } }] },
+    ]);
+
+    const result = await (
+      await connect(client)
+    ).callTool({ name: 'list_tables', arguments: { source: 'second' } });
+
+    expect(result.structuredContent).toMatchObject({
+      tables: [{ schema: 'public', name: 'beta' }],
+      totalMatched: 1,
+    });
+  });
+
+  it('refuses a source whose tables are not identified by schema and name', async () => {
+    const client = withSources([
+      {
+        name: 'default',
+        kind: 'bigquery',
+        tables: [{ table: { dataset: 'analytics', name: 'events' } }],
+      },
+    ]);
+
+    const result = await (await connect(client)).callTool({ name: 'list_tables', arguments: {} });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('bigquery');
+  });
+
   it('makes no pg-prefixed metadata call, so a non-Postgres source still answers', async () => {
     const calls: string[] = [];
     const recording = {

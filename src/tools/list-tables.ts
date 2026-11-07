@@ -29,6 +29,12 @@ export type ListTablesArgs = z.infer<typeof listTablesInput>;
 const bySchemaThenName = (a: TableName, b: TableName): number =>
   a.schema === b.schema ? a.name.localeCompare(b.name) : a.schema.localeCompare(b.schema);
 
+const hasSchemaAndName = (table: unknown): table is TableName =>
+  typeof table === 'object' &&
+  table !== null &&
+  typeof (table as Record<string, unknown>).schema === 'string' &&
+  typeof (table as Record<string, unknown>).name === 'string';
+
 const matching =
   (args: ListTablesArgs) =>
   (table: TableName): boolean =>
@@ -50,11 +56,18 @@ export const runListTables = async (
     );
   }
 
-  // Metadata is the tracked-table list itself, and is not tied to one backend.
+  const tables: unknown[] = allTables(source);
+  if (!tables.every(hasSchemaAndName)) {
+    return toolError(
+      `This tool cannot express table identifiers for a '${source.kind}' source: its tables are ` +
+        'not identified by a schema and a name.',
+    );
+  }
+
   // Deriving the list from query_root field names instead would drop a table
   // named e.g. `payment_stream`, break under per-table root-field renaming, and
   // hide insert-only tables.
-  const matched = allTables(source).filter(matching(args)).sort(bySchemaThenName);
+  const matched = tables.filter(matching(args)).sort(bySchemaThenName);
 
   const { items, truncated, totalMatched } = cap(matched, args.limit);
 
