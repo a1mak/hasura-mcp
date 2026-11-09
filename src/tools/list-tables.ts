@@ -30,12 +30,10 @@ export const listTablesOutput = z.object({
 
 export const listTablesDescription =
   'Every table tracked by this Hasura instance, with both its database name and the name it is ' +
-  'queried by in GraphQL — these differ on instances using a camelCase naming convention, and ' +
-  'the GraphQL one is what a query must use. A null graphqlName means the name could not be ' +
-  'read from the live schema and must not be guessed. The orientation call for an unfamiliar ' +
-  'database, and the way to find the exact name to pass to describe_table. Returns tracked ' +
-  'tables only — a table that exists in the database but is untracked is not queryable through ' +
-  'GraphQL and does not appear here.';
+  'queried by in GraphQL — the GraphQL one is what a query must use. The orientation call for ' +
+  'an unfamiliar database, and the way to find the exact name to pass to describe_table. ' +
+  'Returns tracked tables only — a table that exists in the database but is untracked is not ' +
+  'queryable through GraphQL and does not appear here.';
 
 export type ListTablesArgs = z.infer<typeof listTablesInput>;
 
