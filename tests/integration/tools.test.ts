@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createQueryRootReader } from '../../src/graphql/introspect.js';
 import { createClient } from '../../src/hasura/client.js';
 import { createMetadataReader } from '../../src/metadata.js';
 import { runListTables } from '../../src/tools/list-tables.js';
@@ -13,7 +14,12 @@ const contextFor = (projectDir: string | null = null): ToolContext => {
     projectDir,
   };
   const client = createClient(config);
-  return { config, client, metadata: createMetadataReader(client) };
+  return {
+    config,
+    client,
+    metadata: createMetadataReader(client),
+    queryRoot: createQueryRootReader(client),
+  };
 };
 
 const structured = (result: { structuredContent?: Record<string, unknown> }) =>
@@ -49,7 +55,12 @@ describe('server_info against a live engine', () => {
       projectDir: null,
     };
     const client = createClient(config);
-    const result = await runServerInfo({ config, client, metadata: createMetadataReader(client) });
+    const result = await runServerInfo({
+      config,
+      client,
+      metadata: createMetadataReader(client),
+      queryRoot: createQueryRootReader(client),
+    });
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('HASURA_ADMIN_SECRET');
@@ -61,7 +72,11 @@ describe('list_tables against a live engine', () => {
     const result = await runListTables(contextFor(), { source: 'default', limit: 200 });
 
     expect(result.isError ?? false).toBe(false);
-    expect(structured(result).tables).toContainEqual({ schema: 'public', name: 'patient_consent' });
+    expect(structured(result).tables).toContainEqual({
+      schema: 'public',
+      name: 'patient_consent',
+      graphqlName: 'patient_consent',
+    });
   });
 
   it('omits a table that exists in the database but is not tracked', async () => {
@@ -93,7 +108,51 @@ describe('list_tables against a live engine', () => {
     expect(structured(filtered).tables).toContainEqual({
       schema: 'public',
       name: 'patient_consent',
+      graphqlName: 'patient_consent',
     });
+  });
+
+  it('reports a GraphQL name for every table it lists', async () => {
+    const result = await runListTables(contextFor(), {
+      schema: 'public',
+      source: 'default',
+      limit: 200,
+    });
+    const { tables } = structured(result) as {
+      tables: { name: string; graphqlName: string | null }[];
+    };
+
+    // The public tables use hasura-default, where the two names coincide — what
+    // this pins is that the name was resolved at all, not that it was transformed.
+    expect(tables.length).toBeGreaterThan(0);
+    for (const table of tables) expect(table.graphqlName).not.toBeNull();
+    expect(tables.find((t) => t.name === 'patient_consent')?.graphqlName).toBe('patient_consent');
+  });
+
+  it('resolves a schema-qualified table to a GraphQL name that differs from its database name', async () => {
+    const result = await runListTables(contextFor(), { source: 'default', limit: 200 });
+    const { tables } = structured(result) as {
+      tables: { schema: string; name: string; graphqlName: string | null }[];
+    };
+
+    expect(tables).toContainEqual({
+      schema: 'billing',
+      name: 'ledger',
+      graphqlName: 'ledgerEntries',
+    });
+    expect(tables.find((t) => t.name === 'ledger')?.graphqlName).not.toBe('ledger');
+  });
+
+  it('filters to one schema when two are tracked', async () => {
+    const result = await runListTables(contextFor(), {
+      schema: 'billing',
+      source: 'default',
+      limit: 200,
+    });
+
+    expect(structured(result).tables).toEqual([
+      { schema: 'billing', name: 'ledger', graphqlName: 'ledgerEntries' },
+    ]);
   });
 
   it('does not list the computed field as if it were a table', async () => {

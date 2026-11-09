@@ -64,6 +64,15 @@ sources:
               interval_sec: 5
               timeout_sec: 5
 
+      # Outside `public`, with a GraphQL name that differs from the database name:
+      # pins that list_tables reads the name from the live schema rather than
+      # echoing or deriving it.
+      - table:
+          name: ledger
+          schema: billing
+        configuration:
+          custom_name: ledgerEntries
+
 # Points the engine at itself. Needs BOTH a root-field namespace and a type-name
 # prefix, or root fields and type names collide with the local schema. The URL is
 # substituted at apply time: a port-mapped container reaches itself on 8080, host

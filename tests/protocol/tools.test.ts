@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { createQueryRootReader } from '../../src/graphql/introspect.js';
 import type { HasuraClient } from '../../src/hasura/client.js';
 import { createMetadataReader } from '../../src/metadata.js';
 import { createServer, type ToolContext } from '../../src/server.js';
@@ -48,6 +49,7 @@ const stubHasura = (): HasuraClient =>
     },
     readOnlySql: () => Promise.resolve({ ok: true, data: { result_type: 'TuplesOk', result: [] } }),
     explain: () => Promise.resolve({ ok: true, data: [] }),
+    graphql: () => Promise.resolve({ ok: true, data: { data: { __type: null } } }),
   }) as unknown as HasuraClient;
 
 const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => {
@@ -55,6 +57,7 @@ const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => 
     config: { endpoint: 'http://localhost:8299', adminSecret: 'fixture', projectDir: null },
     client,
     metadata: createMetadataReader(client),
+    queryRoot: createQueryRootReader(client),
   };
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -63,6 +66,18 @@ const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => 
   const mcp = new Client({ name: 'protocol-test', version: '0' });
   await mcp.connect(clientTransport);
   return mcp;
+};
+
+/** Every property the schema declares, nested ones as `parent.child`, so a
+ *  renamed or dropped output field fails here and not in a consumer. */
+const schemaKeys = (schema: unknown, prefix = ''): string[] => {
+  if (typeof schema !== 'object' || schema === null) return [];
+  const node = schema as { properties?: Record<string, unknown>; items?: unknown };
+  if (node.items !== undefined) return schemaKeys(node.items, prefix);
+  return Object.entries(node.properties ?? {}).flatMap(([key, value]) => [
+    `${prefix}${key}`,
+    ...schemaKeys(value, `${prefix}${key}.`),
+  ]);
 };
 
 describe('tools/list', () => {
@@ -103,6 +118,7 @@ describe('tools/list', () => {
           name: t.name,
           title: t.title,
           input: Object.keys((t.inputSchema.properties ?? {}) as Record<string, unknown>).sort(),
+          output: schemaKeys(t.outputSchema).sort(),
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     ).toMatchInlineSnapshot(`
@@ -115,11 +131,31 @@ describe('tools/list', () => {
             "source",
           ],
           "name": "list_tables",
+          "output": [
+            "tables",
+            "tables.graphqlName",
+            "tables.name",
+            "tables.schema",
+            "totalMatched",
+            "truncated",
+          ],
           "title": "List tables",
         },
         {
           "input": [],
           "name": "server_info",
+          "output": [
+            "inconsistentCount",
+            "metadataConsistent",
+            "mutationsEnabled",
+            "projectDir",
+            "projectDirValid",
+            "serverType",
+            "sources",
+            "sources.kind",
+            "sources.name",
+            "version",
+          ],
           "title": "Server info",
         },
       ]
@@ -208,6 +244,84 @@ describe('tools/call', () => {
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('HASURA_ADMIN_SECRET');
+  });
+
+  it('reports the GraphQL name beside the database name', async () => {
+    const named = {
+      ...stubHasura(),
+      graphql: () =>
+        Promise.resolve({
+          ok: true,
+          data: {
+            data: {
+              __type: {
+                fields: [
+                  {
+                    name: 'patientConsent',
+                    description: 'fetch data from the table: "patient_consent"',
+                    args: [],
+                    type: { kind: 'OBJECT', name: 'PatientConsent', ofType: null },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+    } as unknown as HasuraClient;
+
+    const result = await (
+      await connect(named)
+    ).callTool({
+      name: 'list_tables',
+      arguments: { prefix: 'patient' },
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      tables: [{ schema: 'public', name: 'patient_consent', graphqlName: 'patientConsent' }],
+    });
+  });
+
+  it('reports a null GraphQL name rather than echoing the database name', async () => {
+    const result = await (
+      await connect()
+    ).callTool({
+      name: 'list_tables',
+      arguments: { prefix: 'patient' },
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      tables: [{ name: 'patient_consent', graphqlName: null }],
+    });
+  });
+
+  it('introspects once for two calls inside the cache window', async () => {
+    let calls = 0;
+    const counting = {
+      ...stubHasura(),
+      graphql: () => {
+        calls += 1;
+        return Promise.resolve({ ok: true, data: { data: { __type: null } } });
+      },
+    } as unknown as HasuraClient;
+    const mcp = await connect(counting);
+
+    await mcp.callTool({ name: 'list_tables', arguments: {} });
+    await mcp.callTool({ name: 'list_tables', arguments: {} });
+
+    expect(calls).toBe(1);
+  });
+
+  it('still returns the table list when introspection fails', async () => {
+    const broken = {
+      ...stubHasura(),
+      graphql: () =>
+        Promise.resolve({ ok: false, failure: { kind: 'unreachable', detail: 'down' } }),
+    } as unknown as HasuraClient;
+
+    const result = await (await connect(broken)).callTool({ name: 'list_tables', arguments: {} });
+
+    expect(result.isError ?? false).toBe(false);
+    expect(result.structuredContent).toMatchObject({ totalMatched: 3 });
   });
 
   it('names an unknown source rather than returning an empty list', async () => {

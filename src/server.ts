@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 
 import type { ServerConfig } from './config.js';
+import { createQueryRootReader, type QueryRootReader } from './graphql/introspect.js';
 import { createClient, type HasuraClient } from './hasura/client.js';
 import { createMetadataReader, type MetadataReader } from './metadata.js';
 import {
@@ -26,11 +27,17 @@ export type ToolContext = {
   readonly config: ServerConfig;
   readonly client: HasuraClient;
   readonly metadata: MetadataReader;
+  readonly queryRoot: QueryRootReader;
 };
 
 export const createContext = (config: ServerConfig): ToolContext => {
   const client = createClient(config);
-  return { config, client, metadata: createMetadataReader(client) };
+  return {
+    config,
+    client,
+    metadata: createMetadataReader(client),
+    queryRoot: createQueryRootReader(client),
+  };
 };
 
 /** Hosts auto-approve readOnlyHint tools and prompt on destructive ones, so these

@@ -133,6 +133,57 @@ describe('where schema information actually lives', () => {
   });
 });
 
+describe('query_root field descriptions', () => {
+  const queryRootFields = async (): Promise<{ name: string; description: string | null }[]> => {
+    const { body } = await graphql(
+      '{ __type(name: "query_root") { fields { name description } } }',
+    );
+    return (
+      body as { data: { __type: { fields: { name: string; description: string | null }[] } } }
+    ).data.__type.fields;
+  };
+
+  it('describes a public table by its bare name, with no schema', async () => {
+    const fields = await queryRootFields();
+
+    expect(fields.find((f) => f.name === 'patient_consent')?.description).toBe(
+      'fetch data from the table: "patient_consent"',
+    );
+  });
+
+  it('describes a table outside public with its schema qualified', async () => {
+    const fields = await queryRootFields();
+    const described = fields.filter((f) => f.description?.includes('ledger'));
+
+    expect(described.map((f) => f.description)).toContain(
+      'fetch data from the table: "billing.ledger"',
+    );
+    expect(described.map((f) => f.description)).not.toContain(
+      'fetch data from the table: "ledger"',
+    );
+  });
+
+  it('renames the field for a custom_name but still names the database table', async () => {
+    const fields = await queryRootFields();
+
+    expect(fields.map((f) => f.name)).toContain('ledgerEntries');
+    expect(fields.map((f) => f.name)).not.toContain('ledger');
+    expect(fields.find((f) => f.name === 'ledgerEntries')?.description).toBe(
+      'fetch data from the table: "billing.ledger"',
+    );
+  });
+
+  it('gives a remote-schema field no description at all', async () => {
+    // This is the whole discriminator: a field with no description is not a
+    // table, so a tracked table sharing its name cannot borrow it.
+    const fields = await queryRootFields();
+    const remote = fields.find((f) => f.name === 'remote');
+
+    expect(remote).toBeDefined();
+    expect(remote?.description).toBeNull();
+  });
+});
+
 describe('metadata objects that are not tables', () => {
   it('keeps action permissions outside the table permission keys', async () => {
     const { body } = await metadata('export_metadata');
