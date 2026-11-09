@@ -84,26 +84,54 @@ export const buildNameMap = (
 /**
  * The bare key is tried only for `public`: a bare description means the schema
  * was omitted, and `public` is the one case verified. Trying it for any schema
- * would let a hidden `billing.ledger` resolve to `public.ledger`'s names. A
- * non-public table described bare yields null here and falls through to the
- * caller's normalised matching, which refuses a tie.
+ * would let a hidden `billing.ledger` resolve to `public.ledger`'s names.
  */
+const keysFor = (table: TableName): readonly string[] =>
+  table.schema === 'public' ? [tableKey(table), table.name] : [tableKey(table)];
+
 export const lookupTable = (
   map: Map<string, GraphqlTableName>,
   table: TableName,
-): GraphqlTableName | null =>
-  map.get(tableKey(table)) ?? (table.schema === 'public' ? map.get(table.name) : undefined) ?? null;
+): GraphqlTableName | null => {
+  for (const key of keysFor(table)) {
+    const entry = map.get(key);
+    if (entry !== undefined) return entry;
+  }
+  return null;
+};
+
+/**
+ * A field with no description at all is not a table: remote schemas and actions
+ * contribute those, and their names can match a table's. A field whose
+ * description does name a table belongs to that table alone, and only where the
+ * map kept the key — a key dropped as ambiguous leaves its fields unusable for
+ * anything.
+ */
+const standsFor = (
+  map: Map<string, GraphqlTableName>,
+  field: IntrospectionField,
+  table: TableName,
+): boolean => {
+  if (field.description === null) return false;
+
+  const described = TABLE_IN_DESCRIPTION.exec(field.description)?.[1];
+  if (described === undefined) return true;
+
+  return map.has(described) && keysFor(table).includes(described);
+};
 
 /**
  * Descriptions are generated prose, not a documented contract, so a future
  * reword must not break resolution. This rebuilds the lookup from field names
- * alone, which survives any wording change.
+ * alone, which survives any wording change — over the fields the descriptions
+ * have not already spoken for.
  */
 export const lookupByNormalised = (
+  map: Map<string, GraphqlTableName>,
   fields: readonly IntrospectionField[],
   table: TableName,
 ): GraphqlTableName | null => {
-  const rows = fields.filter((f) => !isAggregate(f) && !isByPk(f));
+  const rows = fields.filter((f) => !isAggregate(f) && !isByPk(f) && standsFor(map, f, table));
   const match = matchByNormalised(table.name, rows, (f) => f.name);
   if (match === null) return null;
 

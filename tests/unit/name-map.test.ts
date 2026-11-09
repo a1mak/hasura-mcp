@@ -149,33 +149,79 @@ describe('lookupTable', () => {
 
 describe('lookupByNormalised', () => {
   it('skips aggregate and by-pk rows but still reports the primary key', () => {
+    const map = buildNameMap(CAMEL);
     const table = { schema: 'public', name: 'probe_types' };
 
-    expect(lookupByNormalised(CAMEL, table)).toEqual({
+    expect(lookupByNormalised(map, CAMEL, table)).toEqual({
       queryField: 'probeTypes',
       typeName: 'ProbeTypes',
       pkArgs: ['id'],
     });
     expect(
-      lookupByNormalised(CAMEL, { schema: 'public', name: 'probe_types_aggregate' }),
+      lookupByNormalised(map, CAMEL, { schema: 'public', name: 'probe_types_aggregate' }),
     ).toBeNull();
-    expect(lookupByNormalised(CAMEL, { schema: 'public', name: 'probe_types_by_pk' })).toBeNull();
+    expect(
+      lookupByNormalised(map, CAMEL, { schema: 'public', name: 'probe_types_by_pk' }),
+    ).toBeNull();
   });
 
-  it('resolves without any description, so a reworded description cannot break it', () => {
-    const bare = [field('probeTypes', 'ProbeTypes', null)];
-    const entry = lookupByNormalised(bare, { schema: 'public', name: 'probe_types' });
+  it('resolves a reworded description, which the map cannot parse', () => {
+    const reworded = [field('probeTypes', 'ProbeTypes', 'rows of the probe type catalogue')];
+    const entry = lookupByNormalised(buildNameMap(reworded), reworded, {
+      schema: 'public',
+      name: 'probe_types',
+    });
 
     expect(entry).toMatchObject({ queryField: 'probeTypes', typeName: 'ProbeTypes' });
   });
 
   it('refuses when two fields normalise the same', () => {
     const clashing = [
-      field('userAccount', 'UserAccount', null),
-      field('user_account', 'UserAccount2', null),
+      field('userAccount', 'UserAccount', 'rows of user accounts'),
+      field('user_account', 'UserAccount2', 'rows of user accounts, again'),
     ];
 
-    expect(lookupByNormalised(clashing, { schema: 'public', name: 'user_account' })).toBeNull();
+    expect(
+      lookupByNormalised(buildNameMap(clashing), clashing, {
+        schema: 'public',
+        name: 'user_account',
+      }),
+    ).toBeNull();
+  });
+
+  it('ignores a field carrying no description, which no table field does', () => {
+    // a remote schema contributes one, and its name can match a table's.
+    const remote = [
+      {
+        name: 'remote',
+        description: null,
+        type: { kind: 'OBJECT', name: 'remote_query', ofType: null },
+        args: [],
+      },
+    ];
+
+    expect(
+      lookupByNormalised(buildNameMap(remote), remote, { schema: 'public', name: 'remote' }),
+    ).toBeNull();
+  });
+
+  it('does not borrow a field the description map gave another table', () => {
+    const bare = [field('ledger', 'ledger', 'fetch data from the table: "ledger"')];
+
+    expect(
+      lookupByNormalised(buildNameMap(bare), bare, { schema: 'billing', name: 'ledger' }),
+    ).toBeNull();
+  });
+
+  it('refuses both fields when two sources describe a table of the same name', () => {
+    const clashing = [
+      field('orders', 'orders', 'fetch data from the table: "orders"'),
+      field('wh_orders', 'wh_orders', 'fetch data from the table: "orders"'),
+    ];
+
+    expect(
+      lookupByNormalised(buildNameMap(clashing), clashing, { schema: 'public', name: 'orders' }),
+    ).toBeNull();
   });
 });
 

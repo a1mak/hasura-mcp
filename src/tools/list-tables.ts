@@ -96,7 +96,8 @@ export const runListTables = async (
       schema: table.schema,
       name: table.name,
       graphqlName:
-        (lookupTable(nameMap, table) ?? lookupByNormalised(fields, table))?.queryField ?? null,
+        (lookupTable(nameMap, table) ?? lookupByNormalised(nameMap, fields, table))?.queryField ??
+        null,
     })),
     truncated,
     totalMatched,
