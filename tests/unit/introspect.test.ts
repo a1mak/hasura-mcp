@@ -28,6 +28,12 @@ describe('fetchQueryRoot', () => {
             type: { kind: 'OBJECT', name: 'patient_consent', ofType: null },
             args: [{ name: 'id' }],
           },
+          {
+            name: 'remote_field',
+            description: null,
+            type: { kind: 'OBJECT', name: 'remote_type', ofType: null },
+            args: [],
+          },
         ],
       },
     });
@@ -39,6 +45,10 @@ describe('fetchQueryRoot', () => {
     expect(result.data[0]).toMatchObject({
       name: 'patient_consent_by_pk',
       args: [{ name: 'id' }],
+    });
+    expect(result.data[1]).toMatchObject({
+      name: 'remote_field',
+      description: null,
     });
   });
 
@@ -99,8 +109,14 @@ describe('fetchType', () => {
 
   it('quotes the type name so an odd name cannot break the query', async () => {
     const client = stub({ __type: null });
-    await fetchType(client, 'widget_thing');
+    await fetchType(client, 'Type"with\\Backslash');
 
-    expect(client.lastQuery()).toContain('"widget_thing"');
+    expect(client.lastQuery()).toContain('Type\\"with\\\\Backslash');
+  });
+
+  it('returns null when the payload contains no __type key', async () => {
+    const result = await fetchType(stub({}), 'any_type');
+
+    expect(result).toEqual({ ok: true, data: null });
   });
 });

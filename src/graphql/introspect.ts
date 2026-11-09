@@ -86,7 +86,10 @@ export const fetchType = async (
   if (!result.ok) return result;
 
   const raw = result.data.__type;
-  if (raw === null) return ok(null);
+  // Check both null and undefined: the type says __type is {…} | null, but a missing key
+  // from the response (e.g., payload {}) reaches here as undefined, not null.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (raw === null || raw === undefined) return ok(null);
 
   return ok({
     name: asString(raw.name) ?? name,
