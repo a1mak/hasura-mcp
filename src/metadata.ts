@@ -84,6 +84,8 @@ export const createMetadataReader = (
   };
 };
 
+export const tableKey = (table: TableName): string => `${table.schema}.${table.name}`;
+
 export const findSource = (metadata: Metadata, name: string): MetadataSource | undefined =>
   metadata.sources?.find((source) => source.name === name);
 

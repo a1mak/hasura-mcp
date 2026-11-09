@@ -5,6 +5,7 @@ import {
   allTables,
   createMetadataReader,
   permissionMatrix,
+  tableKey,
   type Metadata,
   type MetadataFetcher,
   type MetadataSource,
@@ -129,5 +130,15 @@ describe('allTables', () => {
 
   it('returns an empty list for a source that does not exist', () => {
     expect(allTables(undefined)).toEqual([]);
+  });
+});
+
+describe('tableKey', () => {
+  it('joins schema and name with a dot', () => {
+    expect(tableKey({ schema: 'billing', name: 'ledger' })).toBe('billing.ledger');
+  });
+
+  it('keeps the schema for public tables', () => {
+    expect(tableKey({ schema: 'public', name: 'patient_consent' })).toBe('public.patient_consent');
   });
 });
