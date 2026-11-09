@@ -68,6 +68,18 @@ const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => 
   return mcp;
 };
 
+/** Every property the schema declares, nested ones as `parent.child`, so a
+ *  renamed or dropped output field fails here and not in a consumer. */
+const schemaKeys = (schema: unknown, prefix = ''): string[] => {
+  if (typeof schema !== 'object' || schema === null) return [];
+  const node = schema as { properties?: Record<string, unknown>; items?: unknown };
+  if (node.items !== undefined) return schemaKeys(node.items, prefix);
+  return Object.entries(node.properties ?? {}).flatMap(([key, value]) => [
+    `${prefix}${key}`,
+    ...schemaKeys(value, `${prefix}${key}.`),
+  ]);
+};
+
 describe('tools/list', () => {
   let tools: Awaited<ReturnType<Client['listTools']>>['tools'];
 
@@ -106,6 +118,7 @@ describe('tools/list', () => {
           name: t.name,
           title: t.title,
           input: Object.keys((t.inputSchema.properties ?? {}) as Record<string, unknown>).sort(),
+          output: schemaKeys(t.outputSchema).sort(),
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     ).toMatchInlineSnapshot(`
@@ -118,11 +131,31 @@ describe('tools/list', () => {
             "source",
           ],
           "name": "list_tables",
+          "output": [
+            "tables",
+            "tables.graphqlName",
+            "tables.name",
+            "tables.schema",
+            "totalMatched",
+            "truncated",
+          ],
           "title": "List tables",
         },
         {
           "input": [],
           "name": "server_info",
+          "output": [
+            "inconsistentCount",
+            "metadataConsistent",
+            "mutationsEnabled",
+            "projectDir",
+            "projectDirValid",
+            "serverType",
+            "sources",
+            "sources.kind",
+            "sources.name",
+            "version",
+          ],
           "title": "Server info",
         },
       ]
