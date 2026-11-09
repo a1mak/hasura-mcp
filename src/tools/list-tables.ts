@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { cap } from '../budget.js';
+import { fetchQueryRoot } from '../graphql/introspect.js';
+import { buildNameMap, lookupByNormalised, lookupTable } from '../graphql/name-map.js';
 import type { ToolContext } from '../server.js';
 import { allTables, findSource, type TableName } from '../metadata.js';
 import { fromFailure, toolError, toolOk, type ToolResult } from './result.js';
@@ -13,16 +15,25 @@ export const listTablesInput = z.object({
 });
 
 export const listTablesOutput = z.object({
-  tables: z.array(z.object({ schema: z.string(), name: z.string() })),
+  tables: z.array(
+    z.object({
+      schema: z.string(),
+      name: z.string(),
+      graphqlName: z.string().nullable(),
+    }),
+  ),
   truncated: z.boolean(),
   totalMatched: z.number(),
 });
 
 export const listTablesDescription =
-  'Every table tracked by this Hasura instance, by name. The orientation call for an ' +
-  'unfamiliar database, and the way to find the exact name to pass to describe_table. ' +
-  'Returns tracked tables only — a table that exists in the database but is untracked is not ' +
-  'queryable through GraphQL and does not appear here.';
+  'Every table tracked by this Hasura instance, with both its database name and the name it is ' +
+  'queried by in GraphQL — these differ on instances using a camelCase naming convention, and ' +
+  'the GraphQL one is what a query must use. A null graphqlName means the name could not be ' +
+  'read from the live schema and must not be guessed. The orientation call for an unfamiliar ' +
+  'database, and the way to find the exact name to pass to describe_table. Returns tracked ' +
+  'tables only — a table that exists in the database but is untracked is not queryable through ' +
+  'GraphQL and does not appear here.';
 
 export type ListTablesArgs = z.infer<typeof listTablesInput>;
 
@@ -71,8 +82,19 @@ export const runListTables = async (
 
   const { items, truncated, totalMatched } = cap(matched, args.limit);
 
+  const queryRoot = await fetchQueryRoot(context.client);
+  // Losing introspection costs the GraphQL names, not the answer: the database
+  // names are already known and are what describe_table takes.
+  const fields = queryRoot.ok ? queryRoot.data : [];
+  const nameMap = buildNameMap(fields);
+
   return toolOk({
-    tables: items.map((table) => ({ schema: table.schema, name: table.name })),
+    tables: items.map((table) => ({
+      schema: table.schema,
+      name: table.name,
+      graphqlName:
+        (lookupTable(nameMap, table) ?? lookupByNormalised(fields, table))?.queryField ?? null,
+    })),
     truncated,
     totalMatched,
   });

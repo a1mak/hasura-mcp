@@ -48,6 +48,7 @@ const stubHasura = (): HasuraClient =>
     },
     readOnlySql: () => Promise.resolve({ ok: true, data: { result_type: 'TuplesOk', result: [] } }),
     explain: () => Promise.resolve({ ok: true, data: [] }),
+    graphql: () => Promise.resolve({ ok: true, data: { data: { __type: null } } }),
   }) as unknown as HasuraClient;
 
 const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => {
@@ -208,6 +209,67 @@ describe('tools/call', () => {
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('HASURA_ADMIN_SECRET');
+  });
+
+  it('reports the GraphQL name beside the database name', async () => {
+    const named = {
+      ...stubHasura(),
+      graphql: () =>
+        Promise.resolve({
+          ok: true,
+          data: {
+            data: {
+              __type: {
+                fields: [
+                  {
+                    name: 'patientConsent',
+                    description: 'fetch data from the table: "patient_consent"',
+                    args: [],
+                    type: { kind: 'OBJECT', name: 'PatientConsent', ofType: null },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+    } as unknown as HasuraClient;
+
+    const result = await (
+      await connect(named)
+    ).callTool({
+      name: 'list_tables',
+      arguments: { prefix: 'patient' },
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      tables: [{ schema: 'public', name: 'patient_consent', graphqlName: 'patientConsent' }],
+    });
+  });
+
+  it('reports a null GraphQL name rather than echoing the database name', async () => {
+    const result = await (
+      await connect()
+    ).callTool({
+      name: 'list_tables',
+      arguments: { prefix: 'patient' },
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      tables: [{ name: 'patient_consent', graphqlName: null }],
+    });
+  });
+
+  it('still returns the table list when introspection fails', async () => {
+    const broken = {
+      ...stubHasura(),
+      graphql: () =>
+        Promise.resolve({ ok: false, failure: { kind: 'unreachable', detail: 'down' } }),
+    } as unknown as HasuraClient;
+
+    const result = await (await connect(broken)).callTool({ name: 'list_tables', arguments: {} });
+
+    expect(result.isError ?? false).toBe(false);
+    expect(result.structuredContent).toMatchObject({ totalMatched: 3 });
   });
 
   it('names an unknown source rather than returning an empty list', async () => {

@@ -61,7 +61,11 @@ describe('list_tables against a live engine', () => {
     const result = await runListTables(contextFor(), { source: 'default', limit: 200 });
 
     expect(result.isError ?? false).toBe(false);
-    expect(structured(result).tables).toContainEqual({ schema: 'public', name: 'patient_consent' });
+    expect(structured(result).tables).toContainEqual({
+      schema: 'public',
+      name: 'patient_consent',
+      graphqlName: 'patient_consent',
+    });
   });
 
   it('omits a table that exists in the database but is not tracked', async () => {
@@ -93,7 +97,25 @@ describe('list_tables against a live engine', () => {
     expect(structured(filtered).tables).toContainEqual({
       schema: 'public',
       name: 'patient_consent',
+      graphqlName: 'patient_consent',
     });
+  });
+
+  it('reports a GraphQL name for every table it lists', async () => {
+    const result = await runListTables(contextFor(), {
+      schema: 'public',
+      source: 'default',
+      limit: 200,
+    });
+    const { tables } = structured(result) as {
+      tables: { name: string; graphqlName: string | null }[];
+    };
+
+    // The fixture uses hasura-default, where the two names coincide — what this
+    // pins is that the name was resolved at all, not that it was transformed.
+    expect(tables.length).toBeGreaterThan(0);
+    for (const table of tables) expect(table.graphqlName).not.toBeNull();
+    expect(tables.find((t) => t.name === 'patient_consent')?.graphqlName).toBe('patient_consent');
   });
 
   it('does not list the computed field as if it were a table', async () => {
