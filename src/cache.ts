@@ -3,9 +3,9 @@ import type { HasuraResult } from './hasura/errors.js';
 /**
  * Engine state is read fresh rather than cached for correctness: a stale copy
  * makes the server answer confidently about a schema that has moved. The window
- * here only de-duplicates reads *within* a single tool call, where several steps
- * need the same document — short enough that nothing observable can change
- * inside it.
+ * is short enough that nothing observable can change inside it, and long enough
+ * to de-duplicate the reads of one turn — several steps of a call, or two tools
+ * that need the same document.
  */
 export const DEFAULT_READ_TTL_MS = 2_000;
 
