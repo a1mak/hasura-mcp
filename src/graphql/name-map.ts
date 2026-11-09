@@ -1,4 +1,3 @@
-// src/graphql/name-map.ts
 import { tableKey, type TableName } from '../metadata.js';
 import type { IntrospectionField } from './introspect.js';
 import { namedType } from './type-ref.js';
@@ -69,10 +68,18 @@ export const buildNameMap = (
   return map;
 };
 
+/**
+ * The bare key is tried only for `public`: a bare description means the schema
+ * was omitted, and `public` is the one case verified. Trying it for any schema
+ * would let a hidden `billing.ledger` resolve to `public.ledger`'s names. A
+ * non-public table described bare yields null here and falls through to the
+ * caller's normalised matching, which refuses a tie.
+ */
 export const lookupTable = (
   map: Map<string, GraphqlTableName>,
   table: TableName,
-): GraphqlTableName | null => map.get(tableKey(table)) ?? map.get(table.name) ?? null;
+): GraphqlTableName | null =>
+  map.get(tableKey(table)) ?? (table.schema === 'public' ? map.get(table.name) : undefined) ?? null;
 
 /**
  * Descriptions are generated prose, not a documented contract, so a future

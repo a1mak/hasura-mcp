@@ -1,4 +1,3 @@
-// tests/unit/name-map.test.ts
 import { describe, expect, it } from 'vitest';
 
 import type { IntrospectionField } from '../../src/graphql/introspect.js';
@@ -111,7 +110,37 @@ describe('buildNameMap', () => {
   });
 });
 
+describe('lookupTable', () => {
+  it('does not borrow a public table for another schema', () => {
+    const bare = [field('ledger', 'ledger', 'fetch data from the table: "ledger"')];
+
+    expect(lookupTable(buildNameMap(bare), { schema: 'billing', name: 'ledger' })).toBeNull();
+  });
+
+  it('finds a bare-described table in public', () => {
+    const bare = [field('ledger', 'ledger', 'fetch data from the table: "ledger"')];
+
+    expect(lookupTable(buildNameMap(bare), { schema: 'public', name: 'ledger' })).toMatchObject({
+      typeName: 'ledger',
+    });
+  });
+});
+
 describe('lookupByNormalised', () => {
+  it('skips aggregate and by-pk rows but still reports the primary key', () => {
+    const table = { schema: 'public', name: 'probe_types' };
+
+    expect(lookupByNormalised(CAMEL, table)).toEqual({
+      queryField: 'probeTypes',
+      typeName: 'ProbeTypes',
+      pkArgs: ['id'],
+    });
+    expect(
+      lookupByNormalised(CAMEL, { schema: 'public', name: 'probe_types_aggregate' }),
+    ).toBeNull();
+    expect(lookupByNormalised(CAMEL, { schema: 'public', name: 'probe_types_by_pk' })).toBeNull();
+  });
+
   it('resolves without any description, so a reworded description cannot break it', () => {
     const bare = [field('probeTypes', 'ProbeTypes', null)];
     const entry = lookupByNormalised(bare, { schema: 'public', name: 'probe_types' });
@@ -137,7 +166,7 @@ describe('lookupByFieldName', () => {
       field(
         'widget_thingByPk',
         'widget_thing',
-        'fetch data from the table: "probe_types" using primary key columns',
+        'fetch data from the table: "widget_thing" using primary key columns',
         ['id'],
       ),
     ];
