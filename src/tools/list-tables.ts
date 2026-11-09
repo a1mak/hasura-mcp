@@ -19,7 +19,10 @@ export const listTablesOutput = z.object({
     z.object({
       schema: z.string(),
       name: z.string(),
-      graphqlName: z.string().nullable(),
+      graphqlName: z
+        .string()
+        .nullable()
+        .describe('The name to write in a GraphQL query. Null means it could not be read.'),
     }),
   ),
   truncated: z.boolean(),
