@@ -63,7 +63,7 @@ const readField = (raw: FieldPayload): IntrospectionField => ({
 export const fetchQueryRoot = async (
   client: GraphqlIntrospector,
 ): Promise<HasuraResult<readonly IntrospectionField[]>> => {
-  const result = await client.graphql<{ __type: { fields?: FieldPayload[] | null } | null }>({
+  const result = await client.graphql<{ __type?: { fields?: FieldPayload[] | null } | null }>({
     query: QUERY_ROOT,
   });
   if (!result.ok) return result;
@@ -76,7 +76,7 @@ export const fetchType = async (
   name: string,
 ): Promise<HasuraResult<IntrospectedType | null>> => {
   const result = await client.graphql<{
-    __type: {
+    __type?: {
       name?: unknown;
       kind?: unknown;
       fields?: FieldPayload[] | null;
@@ -86,10 +86,8 @@ export const fetchType = async (
   if (!result.ok) return result;
 
   const raw = result.data.__type;
-  // Check both null and undefined: the type says __type is {…} | null, but a missing key
-  // from the response (e.g., payload {}) reaches here as undefined, not null.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (raw === null || raw === undefined) return ok(null);
+  // Wire payload may omit the __type key entirely.
+  if (raw == null) return ok(null);
 
   return ok({
     name: asString(raw.name) ?? name,
