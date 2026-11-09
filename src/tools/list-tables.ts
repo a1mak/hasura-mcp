@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { cap } from '../budget.js';
-import { fetchQueryRoot } from '../graphql/introspect.js';
 import { buildNameMap, lookupByNormalised, lookupTable } from '../graphql/name-map.js';
 import type { ToolContext } from '../server.js';
 import { allTables, findSource, type TableName } from '../metadata.js';
@@ -85,7 +84,7 @@ export const runListTables = async (
 
   const { items, truncated, totalMatched } = cap(matched, args.limit);
 
-  const queryRoot = await fetchQueryRoot(context.client);
+  const queryRoot = await context.queryRoot.read();
   // Losing introspection costs the GraphQL names, not the answer: the database
   // names are already known and are what describe_table takes.
   const fields = queryRoot.ok ? queryRoot.data : [];

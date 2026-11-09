@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createQueryRootReader } from '../../src/graphql/introspect.js';
 import { createClient } from '../../src/hasura/client.js';
 import { createMetadataReader } from '../../src/metadata.js';
 import { runListTables } from '../../src/tools/list-tables.js';
@@ -13,7 +14,12 @@ const contextFor = (projectDir: string | null = null): ToolContext => {
     projectDir,
   };
   const client = createClient(config);
-  return { config, client, metadata: createMetadataReader(client) };
+  return {
+    config,
+    client,
+    metadata: createMetadataReader(client),
+    queryRoot: createQueryRootReader(client),
+  };
 };
 
 const structured = (result: { structuredContent?: Record<string, unknown> }) =>
@@ -49,7 +55,12 @@ describe('server_info against a live engine', () => {
       projectDir: null,
     };
     const client = createClient(config);
-    const result = await runServerInfo({ config, client, metadata: createMetadataReader(client) });
+    const result = await runServerInfo({
+      config,
+      client,
+      metadata: createMetadataReader(client),
+      queryRoot: createQueryRootReader(client),
+    });
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('HASURA_ADMIN_SECRET');

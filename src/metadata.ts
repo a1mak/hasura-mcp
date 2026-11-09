@@ -1,3 +1,4 @@
+import { createCachedReader, type CacheOptions, type CachedReader } from './cache.js';
 import type { HasuraResult } from './hasura/errors.js';
 
 export type TableName = { readonly schema: string; readonly name: string };
@@ -26,63 +27,18 @@ export type Metadata = {
   readonly cron_triggers?: readonly { readonly name: string }[];
 };
 
-/**
- * Metadata is read fresh rather than cached for correctness: a stale copy makes
- * the server answer confidently about a schema that has moved. The window here
- * only de-duplicates reads *within* a single tool call, where several steps need
- * the same document — short enough that nothing observable can change inside it.
- */
-export const DEFAULT_METADATA_TTL_MS = 2_000;
-
 /** The single call this reader makes. Stated non-generically so the dependency
  *  is the one method, and a test double is a plain object rather than a cast. */
 export type MetadataFetcher = {
   readonly metadata: (type: string) => Promise<HasuraResult<Metadata>>;
 };
 
-export type MetadataReader = {
-  readonly read: () => Promise<HasuraResult<Metadata>>;
-  readonly invalidate: () => void;
-};
+export type MetadataReader = CachedReader<Metadata>;
 
 export const createMetadataReader = (
   client: MetadataFetcher,
-  options: { readonly ttlMs?: number; readonly now?: () => number } = {},
-): MetadataReader => {
-  const ttlMs = options.ttlMs ?? DEFAULT_METADATA_TTL_MS;
-  const now = options.now ?? Date.now;
-
-  let cached: { readonly at: number; readonly result: HasuraResult<Metadata> } | null = null;
-  let inFlight: Promise<HasuraResult<Metadata>> | null = null;
-
-  const read = async (): Promise<HasuraResult<Metadata>> => {
-    if (cached !== null && now() - cached.at < ttlMs) return cached.result;
-    // Concurrent callers share one request rather than stampeding the engine.
-    if (inFlight !== null) return inFlight;
-
-    inFlight = client
-      .metadata('export_metadata')
-      .then((result) => {
-        // Failures are not cached: the next call should retry, not inherit an outage.
-        if (result.ok) cached = { at: now(), result };
-        return result;
-      })
-      // A throw would otherwise leave the rejected promise parked here forever,
-      // and every later read would inherit it.
-      .finally(() => {
-        inFlight = null;
-      });
-
-    return inFlight;
-  };
-
-  return {
-    read,
-    invalidate: () => {
-      cached = null;
-    },
-  };
-};
+  options: CacheOptions = {},
+): MetadataReader => createCachedReader(() => client.metadata('export_metadata'), options);
 
 export const tableKey = (table: TableName): string => `${table.schema}.${table.name}`;
 

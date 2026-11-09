@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { createQueryRootReader } from '../../src/graphql/introspect.js';
 import type { HasuraClient } from '../../src/hasura/client.js';
 import { createMetadataReader } from '../../src/metadata.js';
 import { createServer, type ToolContext } from '../../src/server.js';
@@ -56,6 +57,7 @@ const connect = async (client: HasuraClient = stubHasura()): Promise<Client> => 
     config: { endpoint: 'http://localhost:8299', adminSecret: 'fixture', projectDir: null },
     client,
     metadata: createMetadataReader(client),
+    queryRoot: createQueryRootReader(client),
   };
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -257,6 +259,23 @@ describe('tools/call', () => {
     expect(result.structuredContent).toMatchObject({
       tables: [{ name: 'patient_consent', graphqlName: null }],
     });
+  });
+
+  it('introspects once for two calls inside the cache window', async () => {
+    let calls = 0;
+    const counting = {
+      ...stubHasura(),
+      graphql: () => {
+        calls += 1;
+        return Promise.resolve({ ok: true, data: { data: { __type: null } } });
+      },
+    } as unknown as HasuraClient;
+    const mcp = await connect(counting);
+
+    await mcp.callTool({ name: 'list_tables', arguments: {} });
+    await mcp.callTool({ name: 'list_tables', arguments: {} });
+
+    expect(calls).toBe(1);
   });
 
   it('still returns the table list when introspection fails', async () => {

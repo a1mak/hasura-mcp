@@ -1,3 +1,4 @@
+import { createCachedReader, type CacheOptions, type CachedReader } from '../cache.js';
 import type { GraphqlRequest } from '../hasura/client.js';
 import { ok, type HasuraResult } from '../hasura/errors.js';
 import type { TypeRef } from './type-ref.js';
@@ -60,6 +61,8 @@ const readField = (raw: FieldPayload): IntrospectionField => ({
   args: (raw.args ?? []).map((arg) => ({ name: asString(arg.name) ?? '' })),
 });
 
+// The client resolves with the whole response body, so both readers below reach
+// through `data` before `__type`, which may itself be absent.
 export const fetchQueryRoot = async (
   client: GraphqlIntrospector,
 ): Promise<HasuraResult<readonly IntrospectionField[]>> => {
@@ -87,8 +90,6 @@ export const fetchType = async (
   }>({ query: namedTypeQuery(name) });
   if (!result.ok) return result;
 
-  // The client returns the whole response body, so the payload sits under `data`,
-  // which may itself omit the __type key.
   const raw = result.data.data?.__type;
   if (raw == null) return ok(null);
 
@@ -102,3 +103,12 @@ export const fetchType = async (
     })),
   });
 };
+
+export type QueryRootReader = CachedReader<readonly IntrospectionField[]>;
+
+/** The map changes only when metadata changes, and a stale name is a wrong
+ *  answer, so it caches on the same window as the metadata reader. */
+export const createQueryRootReader = (
+  client: GraphqlIntrospector,
+  options: CacheOptions = {},
+): QueryRootReader => createCachedReader(() => fetchQueryRoot(client), options);
