@@ -17,7 +17,7 @@ export type CachedReader<T> = {
 export type CacheOptions = { readonly ttlMs?: number; readonly now?: () => number };
 
 export const createCachedReader = <T>(
-  fetch: () => Promise<HasuraResult<T>>,
+  load: () => Promise<HasuraResult<T>>,
   options: CacheOptions = {},
 ): CachedReader<T> => {
   const ttlMs = options.ttlMs ?? DEFAULT_READ_TTL_MS;
@@ -31,7 +31,7 @@ export const createCachedReader = <T>(
     // Concurrent callers share one request rather than stampeding the engine.
     if (inFlight !== null) return inFlight;
 
-    inFlight = fetch()
+    inFlight = load()
       .then((result) => {
         // Failures are not cached: the next call should retry, not inherit an outage.
         if (result.ok) cached = { at: now(), result };

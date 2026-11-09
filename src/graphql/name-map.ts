@@ -51,7 +51,7 @@ export const buildNameMap = (
   fields: readonly IntrospectionField[],
 ): Map<string, GraphqlTableName> => {
   const map = new Map<string, GraphqlTableName>();
-  const selectFields = new Map<string, string>();
+  const selected = new Set<string>();
   const ambiguous = new Set<string>();
 
   for (const field of fields.filter((f) => !isAggregate(f))) {
@@ -65,8 +65,8 @@ export const buildNameMap = (
     const byPk = isByPk(field);
 
     if (!byPk) {
-      if (selectFields.has(described)) ambiguous.add(described);
-      selectFields.set(described, field.name);
+      if (selected.has(described)) ambiguous.add(described);
+      selected.add(described);
     }
 
     map.set(described, {
@@ -103,9 +103,8 @@ export const lookupTable = (
 /**
  * A field with no description at all is not a table: remote schemas and actions
  * contribute those, and their names can match a table's. A field whose
- * description does name a table belongs to that table alone, and only where the
- * map kept the key — a key dropped as ambiguous leaves its fields unusable for
- * anything.
+ * description does name a table belongs to that table and to no other — and
+ * where that key was dropped as ambiguous, to neither table it could mean.
  */
 const standsFor = (
   map: Map<string, GraphqlTableName>,
