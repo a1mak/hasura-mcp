@@ -42,11 +42,17 @@ const pkArgsFor = (fields: readonly IntrospectionField[], typeName: string): rea
 /**
  * Keyed by the table name exactly as the description reports it — bare for a
  * public table, schema-qualified elsewhere — so both spellings resolve.
+ *
+ * The description names a table but never its source, so two sources each
+ * holding a table of that name produce one key for two different tables. Such a
+ * key is dropped: either answer would name the wrong table with full confidence.
  */
 export const buildNameMap = (
   fields: readonly IntrospectionField[],
 ): Map<string, GraphqlTableName> => {
   const map = new Map<string, GraphqlTableName>();
+  const selectFields = new Map<string, string>();
+  const ambiguous = new Set<string>();
 
   for (const field of fields.filter((f) => !isAggregate(f))) {
     const described = TABLE_IN_DESCRIPTION.exec(field.description ?? '')?.[1];
@@ -58,12 +64,19 @@ export const buildNameMap = (
     const existing = map.get(described);
     const byPk = isByPk(field);
 
+    if (!byPk) {
+      if (selectFields.has(described)) ambiguous.add(described);
+      selectFields.set(described, field.name);
+    }
+
     map.set(described, {
       queryField: byPk ? (existing?.queryField ?? field.name) : field.name,
       typeName: existing?.typeName ?? typeName,
       pkArgs: byPk ? field.args.map((a) => a.name) : (existing?.pkArgs ?? []),
     });
   }
+
+  for (const key of ambiguous) map.delete(key);
 
   return map;
 };

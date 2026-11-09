@@ -94,6 +94,27 @@ describe('buildNameMap', () => {
     expect(entry).toMatchObject({ typeName: 'BillingLedger' });
   });
 
+  it('refuses a table name two select fields describe, rather than keeping the last', () => {
+    // the description names a table but never its source, so two sources holding
+    // a table of the same name collapse to one key.
+    const clashing = [
+      field('orders', 'orders', 'fetch data from the table: "orders"'),
+      field('wh_orders', 'wh_orders', 'fetch data from the table: "orders"'),
+    ];
+
+    expect(lookupTable(buildNameMap(clashing), { schema: 'public', name: 'orders' })).toBeNull();
+  });
+
+  it('merges a by-pk field with its own select field whichever comes first', () => {
+    const reversed = [CAMEL[2], CAMEL[0]] as IntrospectionField[];
+
+    expect(lookupTable(buildNameMap(reversed), { schema: 'public', name: 'probe_types' })).toEqual({
+      queryField: 'probeTypes',
+      typeName: 'ProbeTypes',
+      pkArgs: ['id'],
+    });
+  });
+
   it('ignores a field that describes no table', () => {
     // remote schemas and actions sit on query_root too.
     const mixed = [
