@@ -63,12 +63,12 @@ const readField = (raw: FieldPayload): IntrospectionField => ({
 export const fetchQueryRoot = async (
   client: GraphqlIntrospector,
 ): Promise<HasuraResult<readonly IntrospectionField[]>> => {
-  const result = await client.graphql<{ __type?: { fields?: FieldPayload[] | null } | null }>({
-    query: QUERY_ROOT,
-  });
+  const result = await client.graphql<{
+    data?: { __type?: { fields?: FieldPayload[] | null } | null } | null;
+  }>({ query: QUERY_ROOT });
   if (!result.ok) return result;
 
-  return ok((result.data.__type?.fields ?? []).map(readField));
+  return ok((result.data.data?.__type?.fields ?? []).map(readField));
 };
 
 export const fetchType = async (
@@ -76,17 +76,20 @@ export const fetchType = async (
   name: string,
 ): Promise<HasuraResult<IntrospectedType | null>> => {
   const result = await client.graphql<{
-    __type?: {
-      name?: unknown;
-      kind?: unknown;
-      fields?: FieldPayload[] | null;
-      enumValues?: { name?: unknown; description?: unknown }[] | null;
+    data?: {
+      __type?: {
+        name?: unknown;
+        kind?: unknown;
+        fields?: FieldPayload[] | null;
+        enumValues?: { name?: unknown; description?: unknown }[] | null;
+      } | null;
     } | null;
   }>({ query: namedTypeQuery(name) });
   if (!result.ok) return result;
 
-  const raw = result.data.__type;
-  // Wire payload may omit the __type key entirely.
+  // The client returns the whole response body, so the payload sits under `data`,
+  // which may itself omit the __type key.
+  const raw = result.data.data?.__type;
   if (raw == null) return ok(null);
 
   return ok({

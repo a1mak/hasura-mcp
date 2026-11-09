@@ -11,7 +11,7 @@ const stub = (payload: unknown): GraphqlIntrospector & { lastQuery: () => string
   return {
     graphql: ((request: { query: string }) => {
       lastQuery = request.query;
-      return Promise.resolve({ ok: true, data: payload });
+      return Promise.resolve({ ok: true, data: { data: payload } });
     }) as GraphqlIntrospector['graphql'],
     lastQuery: () => lastQuery,
   };
