@@ -111,11 +111,37 @@ describe('list_tables against a live engine', () => {
       tables: { name: string; graphqlName: string | null }[];
     };
 
-    // The fixture uses hasura-default, where the two names coincide — what this
-    // pins is that the name was resolved at all, not that it was transformed.
+    // The public tables use hasura-default, where the two names coincide — what
+    // this pins is that the name was resolved at all, not that it was transformed.
     expect(tables.length).toBeGreaterThan(0);
     for (const table of tables) expect(table.graphqlName).not.toBeNull();
     expect(tables.find((t) => t.name === 'patient_consent')?.graphqlName).toBe('patient_consent');
+  });
+
+  it('resolves a schema-qualified table to a GraphQL name that differs from its database name', async () => {
+    const result = await runListTables(contextFor(), { source: 'default', limit: 200 });
+    const { tables } = structured(result) as {
+      tables: { schema: string; name: string; graphqlName: string | null }[];
+    };
+
+    expect(tables).toContainEqual({
+      schema: 'billing',
+      name: 'ledger',
+      graphqlName: 'ledgerEntries',
+    });
+    expect(tables.find((t) => t.name === 'ledger')?.graphqlName).not.toBe('ledger');
+  });
+
+  it('filters to one schema when two are tracked', async () => {
+    const result = await runListTables(contextFor(), {
+      schema: 'billing',
+      source: 'default',
+      limit: 200,
+    });
+
+    expect(structured(result).tables).toEqual([
+      { schema: 'billing', name: 'ledger', graphqlName: 'ledgerEntries' },
+    ]);
   });
 
   it('does not list the computed field as if it were a table', async () => {

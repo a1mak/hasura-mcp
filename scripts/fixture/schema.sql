@@ -14,6 +14,16 @@ create table if not exists untracked_by_design (
   id uuid primary key default gen_random_uuid()
 );
 
+-- Exists to prove a table outside `public` is described schema-qualified and still
+-- resolves, and that a GraphQL name which differs from the database name comes
+-- back resolved rather than echoed. metadata.yaml tracks it as `ledgerEntries`.
+create schema if not exists billing;
+
+create table if not exists billing.ledger (
+  id     uuid primary key default gen_random_uuid(),
+  amount numeric
+);
+
 -- Backs the `is_active` computed field. The parameter cannot be named `row` —
 -- that is reserved, and Postgres rejects the definition.
 create or replace function consent_is_active(pc patient_consent)
