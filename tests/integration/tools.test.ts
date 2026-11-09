@@ -64,10 +64,19 @@ describe('list_tables against a live engine', () => {
     expect(structured(result).tables).toContainEqual({ schema: 'public', name: 'patient_consent' });
   });
 
-  it('reports an unknown source as an engine failure, not an empty list', async () => {
+  it('omits a table that exists in the database but is not tracked', async () => {
+    const result = await runListTables(contextFor(), { source: 'default', limit: 200 });
+    const names = (structured(result).tables as { name: string }[]).map((t) => t.name);
+
+    expect(names).not.toContain('untracked_by_design');
+  });
+
+  it('names the sources that exist when asked for an unknown one', async () => {
     const result = await runListTables(contextFor(), { source: 'nope', limit: 200 });
 
     expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('nope');
+    expect(JSON.stringify(result.content)).toContain('default');
   });
 
   it('filters by prefix', async () => {

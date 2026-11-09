@@ -8,6 +8,12 @@ create table if not exists patient_consent (
   note       text
 );
 
+-- Exists to prove list_tables omits untracked tables: metadata.yaml deliberately
+-- does not track it.
+create table if not exists untracked_by_design (
+  id uuid primary key default gen_random_uuid()
+);
+
 -- Backs the `is_active` computed field. The parameter cannot be named `row` —
 -- that is reserved, and Postgres rejects the definition.
 create or replace function consent_is_active(pc patient_consent)

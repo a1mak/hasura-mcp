@@ -93,6 +93,9 @@ export const findTable = (
 ): MetadataTable | undefined =>
   source?.tables?.find((t) => t.table.name === table.name && t.table.schema === table.schema);
 
+export const allTables = (source: MetadataSource | undefined): TableName[] =>
+  (source?.tables ?? []).map((entry) => entry.table);
+
 const PERMISSION_KEYS = [
   ['select_permissions', 'select'],
   ['insert_permissions', 'insert'],
